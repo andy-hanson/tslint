@@ -24,9 +24,6 @@ export class Rule extends Lint.Rules.TypedRule {
     public static metadata: Lint.IRuleMetadata = {
         ruleName: "no-inferred-empty-object-type",
         description: "Disallow type inference of {} (empty object type) at function and constructor call sites",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: true,
         requiresTypeInfo: true,

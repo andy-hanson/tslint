@@ -27,9 +27,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         descriptionDetails: Lint.Utils.dedent`
             This rule is primarily useful when using the \`var\` keyword -
             the compiler will detect if a \`let\` and \`const\` variable is used before it is declared.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

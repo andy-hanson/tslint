@@ -24,9 +24,6 @@ export class Rule extends Lint.Rules.AbstractRule {
     public static metadata: Lint.IRuleMetadata = {
         ruleName: "switch-default",
         description: "Require a `default` case in all `switch` statements.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

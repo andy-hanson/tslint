@@ -25,9 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "no-debugger",
         description: "Disallows `debugger` statements.",
         rationale: "In general, \`debugger\` statements aren't appropriate for production code.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

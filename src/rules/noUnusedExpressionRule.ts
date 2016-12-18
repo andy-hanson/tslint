@@ -29,9 +29,6 @@ export class Rule extends Lint.Rules.AbstractRule {
             (and thus usually no-ops).`,
         rationale: Lint.Utils.dedent`
             Detects potential errors where an assignment or function call was intended.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

@@ -26,9 +26,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         description: "Requires that variable declarations use `const` instead of `let` if possible.",
         descriptionDetails: Lint.Utils.dedent`
             If a variable is only assigned to once when it is declared, it should be declared using 'const'`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "maintainability",
         typescriptOnly: false,
     };

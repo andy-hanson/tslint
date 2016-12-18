@@ -25,8 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "callable-types",
         description: "An interface or literal type with just a call signature can be written as a function type.",
         rationale: "style",
-        optionsDescription: "Not configurable.",
-        options: null,
         type: "style",
         typescriptOnly: true,
     };

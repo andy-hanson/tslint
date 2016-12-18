@@ -38,9 +38,6 @@ export class Rule extends Lint.Rules.TypedRule {
             for (const [index, value] of array.entries()) { ... }
             for (let i = 0; i < array.length; i++) { ... }
             `,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         requiresTypeInfo: true,
         type: "functionality",
         typescriptOnly: false,

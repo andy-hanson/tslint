@@ -2,11 +2,6 @@
   {
     "ruleName": "adjacent-overload-signatures",
     "description": "Enforces function overloads to be consecutive.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "rationale": "Improves readability and organization by grouping naturally related items together.",
     "type": "typescript",
     "typescriptOnly": true
@@ -98,8 +93,6 @@
     "ruleName": "callable-types",
     "description": "An interface or literal type with just a call signature can be written as a function type.",
     "rationale": "style",
-    "optionsDescription": "Not configurable.",
-    "options": null,
     "type": "style",
     "typescriptOnly": true
   },
@@ -107,11 +100,6 @@
     "ruleName": "class-name",
     "description": "Enforces PascalCased class and interface names.",
     "rationale": "Makes it easy to differentitate classes from regular variables at a glance.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "style",
     "typescriptOnly": false
   },
@@ -166,11 +154,6 @@
     "ruleName": "curly",
     "description": "Enforces braces for `if`/`for`/`do`/`while` statements.",
     "rationale": "\n```ts\nif (foo === bar)\n    foo++;\n    bar++;\n```\n\nIn the code above, the author almost certainly meant for both `foo++` and `bar++`\nto be executed only if `foo === bar`. However, he forgot braces and `bar++` will be executed\nno matter what. This rule could prevent such a mistake.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -195,11 +178,6 @@
     "ruleName": "eofline",
     "description": "Ensures the file ends with a newline.",
     "rationale": "It is a [standard convention](http://stackoverflow.com/q/729692/3124288) to end files with a newline.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "maintainability",
     "typescriptOnly": false
   },
@@ -220,11 +198,6 @@
     "ruleName": "forin",
     "description": "Requires a `for ... in` statement to be filtered with an `if` statement.",
     "rationale": "\n```ts\nfor (let key in someObject) {\n    if (someObject.hasOwnProperty(key)) {\n        // code here\n    }\n}\n```\nPrevents accidental interation over properties inherited from an object's prototype.\nSee [MDN's `for...in`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for...in)\ndocumentation for more information about `for...in` loops.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -288,8 +261,6 @@
     "ruleName": "interface-over-type-literal",
     "description": "Prefer an interface declaration over a type literal (`type T = { ... }`)",
     "rationale": "style",
-    "optionsDescription": "Not configurable.",
-    "options": null,
     "type": "style",
     "typescriptOnly": true
   },
@@ -298,11 +269,6 @@
     "description": "Enforces basic format rules for JSDoc comments.",
     "descriptionDetails": "\nThe following rules are enforced for JSDoc comments (comments starting with `/**`):\n\n* each line contains an asterisk and asterisks must be aligned\n* each asterisk must be followed by either a space or a newline (except for the first and the last)\n* the only characters before the asterisk on each line must be whitespace characters\n* one line comments must start with `/** ` and end with `*/`",
     "rationale": "Helps maintain a consistent, readable style for JSDoc comments.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "style",
     "typescriptOnly": false
   },
@@ -311,11 +277,6 @@
     "description": "Only allows labels in sensible locations.",
     "descriptionDetails": "This rule only allows labels to be on `do/for/while/switch` statements.",
     "rationale": "\nLabels in JavaScript only can be used in conjunction with `break` or `continue`,\nconstructs meant to be used for loop flow control. While you can theoretically use\nlabels on any block statement in JS, it is considered poor code structure to do so.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -470,11 +431,6 @@
     "ruleName": "new-parens",
     "description": "Requires parentheses when invoking a constructor via the `new` keyword.",
     "rationale": "Maintains stylistic consistency with other function calls.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "style",
     "typescriptOnly": false
   },
@@ -482,11 +438,6 @@
     "ruleName": "no-angle-bracket-type-assertion",
     "description": "Requires the use of `as Type` for type assertions instead of `<Type>`.",
     "rationale": "\nBoth formats of type assertions have the same effect, but only `as` type assertions\nwork in `.tsx` files. This rule ensures that you have a consistent type assertion style\nacross your codebase.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "style",
     "typescriptOnly": true
   },
@@ -494,11 +445,6 @@
     "ruleName": "no-any",
     "description": "Diallows usages of `any` as a type declaration.",
     "rationale": "Using `any` as a type declaration nullifies the compile-time benefits of the type system.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "typescript",
     "typescriptOnly": true
   },
@@ -506,11 +452,6 @@
     "ruleName": "no-arg",
     "description": "Disallows use of `arguments.callee`.",
     "rationale": "\nUsing `arguments.callee` makes various performance optimizations impossible.\nSee [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/arguments/callee)\nfor more details on why to avoid `arguments.callee`.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -519,11 +460,6 @@
     "description": "Disallows bitwise operators.",
     "descriptionDetails": "\nSpecifically, the following bitwise operators are banned:\n`&`, `&=`, `|`, `|=`,\n`^`, `^=`, `<<`, `<<=`,\n`>>`, `>>=`, `>>>`, `>>>=`, and `~`.\nThis rule does not ban the use of `&` and `|` for intersection and union types.",
     "rationale": "\nBitwise operators are often typos - for example `bool1 & bool2` instead of `bool1 && bool2`.\nThey also can be an indicator of overly clever code which decreases maintainability.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -532,11 +468,6 @@
     "description": "Disallows any type of assignment in conditionals.",
     "descriptionDetails": "This applies to `do-while`, `for`, `if`, and `while` statements.",
     "rationale": "\nAssignments in conditionals are often typos:\nfor example `if (var1 = var2)` instead of `if (var1 == var2)`.\nThey also can be an indicator of overly clever code which decreases maintainability.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -578,11 +509,6 @@
     "description": "Disallows access to the constructors of `String`, `Number`, and `Boolean`.",
     "descriptionDetails": "Disallows constructor use such as `new Number(foo)` but does not disallow `Number(foo)`.",
     "rationale": "\nThere is little reason to use `String`, `Number`, or `Boolean` as constructors.\nIn almost all cases, the regular function-call version is more appropriate.\n[More details](http://stackoverflow.com/q/4719320/3124288) are available on StackOverflow.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -590,11 +516,6 @@
     "ruleName": "no-debugger",
     "description": "Disallows `debugger` statements.",
     "rationale": "In general, `debugger` statements aren't appropriate for production code.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -603,11 +524,6 @@
     "description": "Disallows default exports in ES6-style modules.",
     "descriptionDetails": "Use named exports instead.",
     "rationale": "\nNamed imports/exports [promote clarity](https://github.com/palantir/tslint/issues/1182#issue-151780453).\nIn addition, current tooling differs on the correct way to handle default imports/exports.\nAvoiding them all together can help avoid tooling bugs and conflicts.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "maintainability",
     "typescriptOnly": false
   },
@@ -616,11 +532,6 @@
     "description": "Disallows duplicate variable declarations in the same block scope.",
     "descriptionDetails": "\nThis rule is only useful when using the `var` keyword -\nthe compiler will detect redeclarations of `let` and `const` variables.",
     "rationale": "\nA variable can be reassigned if necessary -\nthere's no good reason to have a duplicate variable declaration.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -628,8 +539,6 @@
     "ruleName": "no-empty-interface",
     "description": "Forbids empty interfaces.",
     "rationale": "An empty interface is equivalent to its supertype (or `{}`).",
-    "optionsDescription": "Not configurable.",
-    "options": null,
     "type": "typescript",
     "typescriptOnly": true
   },
@@ -638,11 +547,6 @@
     "description": "Disallows empty blocks.",
     "descriptionDetails": "Blocks with a comment inside are not considered empty.",
     "rationale": "Empty blocks are often indicators of missing code.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -650,11 +554,6 @@
     "ruleName": "no-eval",
     "description": "Disallows `eval` function invocations.",
     "rationale": "\n`eval()` is dangerous as it allows arbitrary code execution with full privileges. There are\n[alternatives](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval)\nfor most of the use cases for `eval()`.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -662,11 +561,6 @@
     "ruleName": "no-for-in-array",
     "description": "Disallows iterating over an array with a for-in loop.",
     "descriptionDetails": "\nA for-in loop (`for (var k in o)`) iterates over the properties of an Object.\n\nWhile it is legal to use for-in loops with array types, it is not common.\nfor-in will iterate over the indices of the array as strings, omitting any \"holes\" in\nthe array.\n\nMore common is to use for-of, which iterates over the values of an array.\nIf you want to iterate over the indices, alternatives include:\n\narray.forEach((value, index) => { ... });\nfor (const [index, value] of array.entries()) { ... }\nfor (let i = 0; i < array.length; i++) { ... }\n",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "requiresTypeInfo": true,
     "type": "functionality",
     "typescriptOnly": false
@@ -697,11 +591,6 @@
   {
     "ruleName": "no-inferred-empty-object-type",
     "description": "Disallow type inference of {} (empty object type) at function and constructor call sites",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": true,
     "requiresTypeInfo": true
@@ -710,11 +599,6 @@
     "ruleName": "no-internal-module",
     "description": "Disallows internal `module`",
     "rationale": "Using `module` leads to a confusion of concepts with external modules. Use the newer `namespace` keyword instead.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "typescript",
     "typescriptOnly": true
   },
@@ -763,11 +647,6 @@
   {
     "ruleName": "no-mergeable-namespace",
     "description": "Disallows mergeable namespaces in the same file.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "maintainability",
     "typescriptOnly": true
   },
@@ -799,11 +678,6 @@
     "ruleName": "no-null-keyword",
     "description": "Disallows use of the `null` keyword literal.",
     "rationale": "\nInstead of having the dual concepts of `null` and`undefined` in a codebase,\nthis rule ensures that only `undefined` is used.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -811,11 +685,6 @@
     "ruleName": "no-parameter-properties",
     "description": "Disallows parameter properties in class constructors.",
     "rationale": "\nParameter properties can be confusing to those new to TS as they are less explicit\nthan other ways of declaring and initializing class members.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "style",
     "typescriptOnly": true
   },
@@ -823,11 +692,6 @@
     "ruleName": "no-reference",
     "description": "Disallows `/// <reference path=>` imports (use ES6-style imports instead).",
     "rationale": "\nUsing `/// <reference path=>` comments to load other files is outdated.\nUse ES6-style imports to reference other files.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "typescript",
     "typescriptOnly": false
   },
@@ -835,11 +699,6 @@
     "ruleName": "no-require-imports",
     "description": "Disallows invocation of `require()`.",
     "rationale": "Prefer the newer ES6-style imports over `require()`.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "maintainability",
     "typescriptOnly": false
   },
@@ -847,11 +706,6 @@
     "ruleName": "no-shadowed-variable",
     "description": "Disallows shadowing variable declarations.",
     "rationale": "Shadowing a variable masks access to it and obscures to what value an identifier actually refers.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -859,11 +713,12 @@
     "ruleName": "no-string-literal",
     "description": "Disallows object access via string literals.",
     "rationale": "Encourages using strongly-typed property access.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
+    "type": "functionality",
+    "typescriptOnly": false
+  },
+  {
+    "ruleName": "no-string-throw",
+    "description": "Flags throwing plain strings or concatenations of strings because only Errors produce proper stack traces.",
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -872,11 +727,6 @@
     "description": "Disallows falling through case statements.",
     "descriptionDetails": "\nFor example, the following is not allowed:\n\n```ts\nswitch(foo) {\n    case 1:\n        someFunc(foo);\n    case 2:\n        someOtherFunc(foo);\n}\n```\n\nHowever, fall through is allowed when case statements are consecutive or\na magic `/* falls through */` comment is present. The following is valid:\n\n```ts\nswitch(foo) {\n    case 1:\n        someFunc(foo);\n        /* falls through */\n    case 2:\n    case 3:\n        someOtherFunc(foo);\n}\n```",
     "rationale": "Fall though in switch statements is often unintentional and a bug.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -884,11 +734,6 @@
     "ruleName": "no-trailing-whitespace",
     "description": "Disallows trailing whitespace at the end of a line.",
     "rationale": "Keeps version control diffs clean as it prevents accidental whitespace from being committed.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "maintainability",
     "typescriptOnly": false
   },
@@ -897,11 +742,6 @@
     "description": "\nDisallows control flow statements, such as `return`, `continue`,\n`break` and `throws` in finally blocks.",
     "descriptionDetails": "",
     "rationale": "\nWhen used inside `finally` blocks, control flow statements,\nsuch as `return`, `continue`, `break` and `throws`\noverride any other control flow statements in the same try/catch scope.\nThis is confusing and unexpected behavior.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -910,11 +750,6 @@
     "description": "Disallows unused expression statements.",
     "descriptionDetails": "\nUnused expressions are expression statements which are not assignments or function calls\n(and thus usually no-ops).",
     "rationale": "\nDetects potential errors where an assignment or function call was intended.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -923,11 +758,6 @@
     "description": "Disallows unused 'new' expression statements.",
     "descriptionDetails": "\nUnused 'new' expressions indicate that a constructor is being invoked solely for its side effects.",
     "rationale": "\nDetects constructs such as `new SomeClass()`, where a constructor is used solely for its side effects, which is considered\npoor style.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -972,11 +802,6 @@
     "ruleName": "no-use-before-declare",
     "description": "Disallows usage of variables before their declaration.",
     "descriptionDetails": "\nThis rule is primarily useful when using the `var` keyword -\nthe compiler will detect if a `let` and `const` variable is used before it is declared.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -984,11 +809,6 @@
     "ruleName": "no-var-keyword",
     "description": "Disallows usage of the `var` keyword.",
     "descriptionDetails": "Use `let` or `const` instead.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -996,19 +816,12 @@
     "ruleName": "no-var-requires",
     "description": "Disallows the use of require statements except in import statements.",
     "descriptionDetails": "\nIn other words, the use of forms such as `var module = require(\"module\")` are banned.\nInstead use ES6 style imports or `import foo = require('foo')` imports.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "typescript",
     "typescriptOnly": true
   },
   {
     "ruleName": "no-void-expression",
     "description": "Requires expressions of type `void` to appear in statement position.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
     "requiresTypeInfo": true,
     "type": "functionality",
     "typescriptOnly": false
@@ -1037,11 +850,6 @@
   {
     "ruleName": "object-literal-shorthand",
     "description": "Enforces use of ES6 object literal shorthand when possible.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "style",
     "typescriptOnly": false
   },
@@ -1049,11 +857,6 @@
     "ruleName": "object-literal-sort-keys",
     "description": "Requires keys in object literals to be sorted alphabetically",
     "rationale": "Useful in preventing merge conflicts",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "maintainability",
     "typescriptOnly": false
   },
@@ -1168,11 +971,6 @@
     "ruleName": "prefer-const",
     "description": "Requires that variable declarations use `const` instead of `let` if possible.",
     "descriptionDetails": "\nIf a variable is only assigned to once when it is declared, it should be declared using 'const'",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "maintainability",
     "typescriptOnly": false
   },
@@ -1180,11 +978,6 @@
     "ruleName": "prefer-for-of",
     "description": "Recommends a 'for-of' loop over a standard 'for' loop if the index is only used to access the array being iterated.",
     "rationale": "A for(... of ...) loop is easier to implement and read when the index is not needed.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "typescript",
     "typescriptOnly": false
   },
@@ -1192,11 +985,6 @@
     "ruleName": "promise-function-async",
     "description": "Requires any function or method that returns a promise to be marked async.",
     "rationale": "\nEnsures that each function is only capable of 1) returning a rejected promise, or 2)\nthrowing an Error object. In contrast, non-`async` `Promise`-returning functions\nare technically capable of either. This practice removes a requirement for consuming\ncode to handle both cases.\n        ",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "typescript",
     "typescriptOnly": false,
     "requiresTypeInfo": true
@@ -1231,22 +1019,12 @@
     "ruleName": "radix",
     "description": "Requires the radix parameter to be specified when calling `parseInt`.",
     "rationale": "\nFrom [MDN](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt):\n> Always specify this parameter to eliminate reader confusion and to guarantee predictable behavior.\n> Different implementations produce different results when a radix is not specified, usually defaulting the value to 10.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
   {
     "ruleName": "restrict-plus-operands",
     "description": "When adding two variables, operands must both be of type number or of type string.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false,
     "requiresTypeInfo": true
@@ -1286,11 +1064,6 @@
   {
     "ruleName": "strict-boolean-expressions",
     "description": "Usage of && or || operators should be with boolean operands and\nexpressions in If, Do, While and For statements should be of type boolean",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": true,
     "requiresTypeInfo": true
@@ -1298,11 +1071,6 @@
   {
     "ruleName": "switch-default",
     "description": "Require a `default` case in all `switch` statements.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },
@@ -1500,11 +1268,6 @@
     "ruleName": "use-isnan",
     "description": "Enforces use of the `isNaN()` function to check for NaN references instead of a comparison to the `NaN` constant.",
     "rationale": "\nSince `NaN !== NaN`, comparisons with regular operators will produce unexpected results.\nSo, instead of `if (myVar === NaN)`, do `if (isNaN(myVar))`.",
-    "optionsDescription": "Not configurable.",
-    "options": null,
-    "optionExamples": [
-      "true"
-    ],
     "type": "functionality",
     "typescriptOnly": false
   },

@@ -27,9 +27,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         rationale: Lint.Utils.dedent`
             Since \`NaN !== NaN\`, comparisons with regular operators will produce unexpected results.
             So, instead of \`if (myVar === NaN)\`, do \`if (isNaN(myVar))\`.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

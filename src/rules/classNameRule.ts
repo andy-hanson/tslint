@@ -25,9 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "class-name",
         description: "Enforces PascalCased class and interface names.",
         rationale: "Makes it easy to differentitate classes from regular variables at a glance.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "style",
         typescriptOnly: false,
     };

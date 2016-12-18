@@ -27,9 +27,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         rationale: Lint.Utils.dedent`
             Using \`/// <reference path=>\` comments to load other files is outdated.
             Use ES6-style imports to reference other files.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "typescript",
         typescriptOnly: false,
     };

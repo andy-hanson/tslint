@@ -35,9 +35,6 @@ export class Rule extends Lint.Rules.AbstractRule {
             Prevents accidental interation over properties inherited from an object's prototype.
             See [MDN's \`for...in\`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for...in)
             documentation for more information about \`for...in\` loops.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

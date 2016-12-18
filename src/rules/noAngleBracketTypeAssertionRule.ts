@@ -28,9 +28,6 @@ export class Rule extends Lint.Rules.AbstractRule {
             Both formats of type assertions have the same effect, but only \`as\` type assertions
             work in \`.tsx\` files. This rule ensures that you have a consistent type assertion style
             across your codebase.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "style",
         typescriptOnly: true,
     };

@@ -50,9 +50,6 @@ export class Rule extends Lint.Rules.AbstractRule {
             }
             \`\`\``,
         rationale: "Fall though in switch statements is often unintentional and a bug.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

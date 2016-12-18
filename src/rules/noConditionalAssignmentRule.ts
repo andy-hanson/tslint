@@ -29,9 +29,6 @@ export class Rule extends Lint.Rules.AbstractRule {
             Assignments in conditionals are often typos:
             for example \`if (var1 = var2)\` instead of \`if (var1 == var2)\`.
             They also can be an indicator of overly clever code which decreases maintainability.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

@@ -25,8 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "no-empty-interface",
         description: "Forbids empty interfaces.",
         rationale: "An empty interface is equivalent to its supertype (or `{}`).",
-        optionsDescription: "Not configurable.",
-        options: null,
         type: "typescript",
         typescriptOnly: true,
     };

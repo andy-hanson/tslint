@@ -48,7 +48,7 @@ export interface IRuleMetadata {
     /**
      * An explanation of the available options for the rule.
      */
-    optionsDescription: string;
+    optionsDescription?: string;
 
     /**
      * Schema of the options the rule accepts.
@@ -56,7 +56,7 @@ export interface IRuleMetadata {
      * This field describes the options after that boolean.
      * If null, this rule has no options and is not configurable.
      */
-    options: any;
+    options?: any;
 
     /**
      * Examples of what a standard config for the rule might look like.

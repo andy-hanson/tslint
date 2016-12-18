@@ -25,8 +25,6 @@ export class Rule extends Lint.Rules.TypedRule {
     public static metadata: Lint.IRuleMetadata = {
         ruleName: "no-void-expression",
         description: "Requires expressions of type `void` to appear in statement position.",
-        optionsDescription: "Not configurable.",
-        options: null,
         requiresTypeInfo: true,
         type: "functionality",
         typescriptOnly: false,

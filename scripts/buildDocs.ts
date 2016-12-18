@@ -150,10 +150,11 @@ function buildDocumentationDataFile(documentation: IDocumentation, metadataJson:
  * Generates Jekyll data from any item's metadata.
  */
 function generateJekyllData(metadata: any, type: string, name: string): any {
-    return Object.assign({}, metadata, {
+    return {
+        ...metadata,
         layout: type.toLowerCase(),
         title: `${type}: ${name}`,
-    });
+    };
 }
 
 /**
@@ -161,8 +162,17 @@ function generateJekyllData(metadata: any, type: string, name: string): any {
  * that only consists of a YAML front matter block.
  */
 function generateRuleFile(metadata: IRuleMetadata): string {
+    if (!("options" in metadata)) {
+        metadata = {
+            ...metadata,
+            options: null,
+            optionsDescription: "Not configurable.",
+            optionsExamples: ["true"]
+        };
+    }
+
     const yamlData = generateJekyllData(metadata, "Rule", metadata.ruleName);
-    yamlData.optionsJSON = JSON.stringify(metadata.options, undefined, 2);
+    yamlData.optionsJSON = JSON.stringify(metadata.options || null, undefined, 2);
     return `---\n${yaml.safeDump(yamlData, <any> {lineWidth: 140})}---`;
 }
 

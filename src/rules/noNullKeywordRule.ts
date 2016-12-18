@@ -29,9 +29,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         rationale: Lint.Utils.dedent`
             Instead of having the dual concepts of \`null\` and\`undefined\` in a codebase,
             this rule ensures that only \`undefined\` is used.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

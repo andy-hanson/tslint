@@ -27,9 +27,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         rationale: Lint.Utils.dedent`
             Parameter properties can be confusing to those new to TS as they are less explicit
             than other ways of declaring and initializing class members.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "style",
         typescriptOnly: true,
     };

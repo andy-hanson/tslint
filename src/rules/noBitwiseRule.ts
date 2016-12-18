@@ -33,9 +33,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         rationale: Lint.Utils.dedent`
             Bitwise operators are often typos - for example \`bool1 & bool2\` instead of \`bool1 && bool2\`.
             They also can be an indicator of overly clever code which decreases maintainability.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

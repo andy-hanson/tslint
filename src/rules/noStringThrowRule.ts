@@ -7,8 +7,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "no-string-throw",
         description: `Flags throwing plain strings or concatenations of strings ` +
             `because only Errors produce proper stack traces.`,
-        options: null,
-        optionsDescription: "",
         type: "functionality",
         typescriptOnly: false,
     };

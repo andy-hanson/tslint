@@ -29,9 +29,6 @@ export class Rule extends Lint.Rules.TypedRule {
             are technically capable of either. This practice removes a requirement for consuming
             code to handle both cases.
         `,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "typescript",
         typescriptOnly: false,
         requiresTypeInfo: true,

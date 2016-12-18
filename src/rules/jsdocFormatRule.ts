@@ -32,9 +32,6 @@ export class Rule extends Lint.Rules.AbstractRule {
             * the only characters before the asterisk on each line must be whitespace characters
             * one line comments must start with \`/** \` and end with \`*/\``,
         rationale: "Helps maintain a consistent, readable style for JSDoc comments.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "style",
         typescriptOnly: false,
     };

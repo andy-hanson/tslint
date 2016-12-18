@@ -25,9 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "new-parens",
         description: "Requires parentheses when invoking a constructor via the `new` keyword.",
         rationale: "Maintains stylistic consistency with other function calls.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "style",
         typescriptOnly: false,
     };

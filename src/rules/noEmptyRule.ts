@@ -26,9 +26,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         description: "Disallows empty blocks.",
         descriptionDetails: "Blocks with a comment inside are not considered empty.",
         rationale: "Empty blocks are often indicators of missing code.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

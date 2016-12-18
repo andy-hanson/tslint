@@ -25,9 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "no-internal-module",
         description: "Disallows internal `module`",
         rationale: "Using `module` leads to a confusion of concepts with external modules. Use the newer `namespace` keyword instead.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "typescript",
         typescriptOnly: true,
     };

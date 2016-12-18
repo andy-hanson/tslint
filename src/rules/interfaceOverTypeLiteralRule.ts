@@ -25,8 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "interface-over-type-literal",
         description: "Prefer an interface declaration over a type literal (`type T = { ... }`)",
         rationale: "style",
-        optionsDescription: "Not configurable.",
-        options: null,
         type: "style",
         typescriptOnly: true,
     };

@@ -30,9 +30,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         rationale: Lint.Utils.dedent`
             Detects constructs such as \`new SomeClass()\`, where a constructor is used solely for its side effects, which is considered
             poor style.`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: false,
     };

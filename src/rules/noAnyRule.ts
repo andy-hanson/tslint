@@ -25,9 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "no-any",
         description: "Diallows usages of `any` as a type declaration.",
         rationale: "Using `any` as a type declaration nullifies the compile-time benefits of the type system.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "typescript",
         typescriptOnly: true,
     };

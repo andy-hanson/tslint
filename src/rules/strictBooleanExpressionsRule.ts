@@ -25,9 +25,6 @@ export class Rule extends Lint.Rules.TypedRule {
         ruleName: "strict-boolean-expressions",
         description: `Usage of && or || operators should be with boolean operands and
 expressions in If, Do, While and For statements should be of type boolean`,
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "functionality",
         typescriptOnly: true,
         requiresTypeInfo: true,

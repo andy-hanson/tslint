@@ -25,9 +25,6 @@ export class Rule extends Lint.Rules.AbstractRule {
         ruleName: "no-require-imports",
         description: "Disallows invocation of `require()`.",
         rationale: "Prefer the newer ES6-style imports over `require()`.",
-        optionsDescription: "Not configurable.",
-        options: null,
-        optionExamples: ["true"],
         type: "maintainability",
         typescriptOnly: false,
     };
