@@ -1,0 +1,49 @@
+class X {
+m1() {}
+~ [0]
+	m2() {
+		function f() {
+			return {
+				x: 1,
+			y: 2
+			~ [Expected indent to be 4, actual: 3]
+			}
+		}
+	}
+}
+
+// Any nested node should be indented one level relative to the last node that started a line.
+foo(
+	bar);
+
+// Even if it's nested more than one level.
+foo(bar(
+	baz));
+
+switch (x) {
+	case y:
+		return z;
+}
+
+{
+	const x = 0;
+}
+
+if (true) {
+	const x = 1;
+}
+
+if (true)
+{
+	const x = 1;
+}
+
+if (true)
+	{
+	~ [1]
+	const x = 2;
+	//TODO: need to test for ending tokens...
+	}
+
+[0]: Expected indent to be 1, actual: 0
+[1]: Expected indent to be 0, actual: 1
