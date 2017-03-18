@@ -114,3 +114,13 @@ export type Equal<T> = (a: T, b: T) => boolean;
 export function arraysAreEqual<T>(a: T[] | undefined, b: T[] | undefined, eq: Equal<T>): boolean {
     return a === b || !!a && !!b && a.length === b.length && a.every((x, idx) => eq(x, b[idx]));
 }
+
+export function find<T, U>(a: T[], f: (t: T) => U | undefined): U | undefined {
+    for (const element of a) {
+        const result = f(element);
+        if (result !== undefined) {
+            return result;
+        }
+    }
+    return undefined;
+}

@@ -22,7 +22,7 @@ import { getRelativePath } from "./configuration";
 import { showWarningOnce } from "./error";
 import { AbstractRule } from "./language/rule/abstractRule";
 import { IDisabledInterval, IOptions, IRule } from "./language/rule/rule";
-import { arrayify, camelize, dedent } from "./utils";
+import { arrayify, camelize, dedent, find } from "./utils";
 
 const moduleDirectory = path.dirname(module.filename);
 const CORE_RULES_DIRECTORY = path.resolve(moduleDirectory, ".", "rules");
@@ -95,18 +95,7 @@ export function findRule(name: string, rulesDirectories?: string | string[]) {
 
     // first check for core rules
     Rule = loadCachedRule(CORE_RULES_DIRECTORY, camelizedName);
-
-    if (Rule == null) {
-        // then check for rules within the first level of rulesDirectory
-        for (const dir of arrayify(rulesDirectories)) {
-            Rule = loadCachedRule(dir, camelizedName, true);
-            if (Rule != null) {
-                break;
-            }
-        }
-    }
-
-    return Rule;
+    return Rule || find(arrayify(rulesDirectories), dir => loadCachedRule(dir, camelizedName, true));
 }
 
 function transformName(name: string) {
