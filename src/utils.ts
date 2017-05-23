@@ -148,6 +148,16 @@ export function flatMap<T, U>(inputs: T[], getOutputs: (input: T) => U[]): U[] {
     return out;
 }
 
+export function findDefined<T, U>(inputs: T[], getOutput: (input: T) => U | undefined): U | undefined {
+    for (const input of inputs) {
+        const output = getOutput(input);
+        if (output !== undefined) {
+            return output;
+        }
+    }
+    return undefined;
+}
+
 /** Returns an array of all outputs that are not `undefined`. */
 export function mapDefined<T, U>(inputs: T[], getOutput: (input: T) => U | undefined): U[] {
     const out = [];

@@ -1,0 +1,19 @@
+[1, "two", 3].forEach((x: string) => {});
+                          ~~~~~~ [0]
+
+// Return type annotation OK
+[1, "two", 3].forEach((x): void => {});
+
+// No type annotation OK
+[1, "two", 3].forEach(x => {});
+
+const fn = (x: number): void => {};
+
+
+declare function f(obj: { m(x: number | string): void }): void;
+f({ m(x: string) {} });
+         ~~~~~~ [0]
+
+const o = { m(x: string) {} };
+
+[0]: Function has a contextual type; do not specify types!
