@@ -172,7 +172,8 @@ function findDeprecationTag(tags: ts.JSDocTagInfo[]): string | undefined {
     return undefined;
 }
 
-function getSymbolDeprecation(symbol: ts.Symbol): string | undefined {
+//mv
+export function getSymbolDeprecation(symbol: ts.Symbol): string | undefined {
     if (symbol.getJsDocTags !== undefined) {
         return findDeprecationTag(symbol.getJsDocTags());
     }

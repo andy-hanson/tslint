@@ -157,6 +157,7 @@ export class Replacement {
         return this.applyAll(content, flatMap(fixes, arrayify));
     }
 
+    // tslint:disable-next-line no-unused-anything (This is a public API, but could we deprecate this?)
     public static applyAll(content: string, replacements: Replacement[]) {
         // sort in reverse so that diffs are properly applied
         replacements.sort((a, b) => b.end !== a.end ? b.end - a.end : b.start - a.start);
@@ -185,10 +186,12 @@ export class Replacement {
 
     constructor(readonly start: number, readonly length: number, readonly text: string) {}
 
+    // tslint:disable-next-line no-unused-anything (This is a public API, but could we deprecate this?)
     get end() {
         return this.start + this.length;
     }
 
+    // tslint:disable-next-line no-unused-anything (This is a public API, but could we deprecate this?)
     public apply(content: string) {
         return content.substring(0, this.start) + this.text + content.substring(this.start + this.length);
     }
@@ -317,6 +320,7 @@ export class RuleFailure {
         };
     }
 
+    // tslint:disable-next-line no-unused-anything (This is a public API, but could we deprecate this?)
     public equals(ruleFailure: RuleFailure) {
         return this.failure  === ruleFailure.getFailure()
             && this.fileName === ruleFailure.getFileName()

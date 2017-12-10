@@ -15,8 +15,12 @@
  * limitations under the License.
  */
 
+// We use AbstractWalker everywhere instead.
+// tslint:disable no-unused-anything
+
 import * as ts from "typescript";
 
+/** @deprecated Prefer AbstractWalker. */
 export class SyntaxWalker {
     public walk(node: ts.Node) {
         this.visitNode(node);

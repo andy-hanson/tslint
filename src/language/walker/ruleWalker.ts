@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+// We use AbstractWalker everywhere instead.
+// tslint:disable no-unused-anything
+
 import * as ts from "typescript";
 
 import { Fix, IOptions, Replacement, RuleFailure } from "../rule/rule";

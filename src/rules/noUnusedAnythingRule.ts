@@ -21,12 +21,15 @@ import * as ts from "typescript";
 
 import * as Lint from "..";
 import { skipAlias } from "./noUnnecessaryQualifierRule";
+import { getSymbolDeprecation } from './deprecationRule';
 
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
 //TODO: warning for things created but never read
 //todo: test that we detect unused enum members
 //todo: detect parameter of recursive fn only passed to another instance of the same fn
 //TODO: error if optional property is never created/written to
+//todo: detect recursive unused functions (maybe a different rule for that)
+//todo: document that `@deprecated` comments disable this rule
 
 export class Rule extends Lint.Rules.TypedRule {
     /* tslint:disable:object-literal-sort-keys */
@@ -89,13 +92,25 @@ class Walker extends Lint.AbstractWalker<Options> {
                     } else {
                         //todo
                     }
+                    break;
+                default:
+                    if (isElementOfClass(node)) {
+                        if (!this.info.classElementsUsedPublicly.has(node)
+                            //If abstract, it may only be used in this class, but still can't be private.
+                            && !hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)
+                            && !isOverload(node, this.checker)
+                            && !isOverride(node, this.checker)
+                            && !isDeprecated(node, this.checker)) {
+                            this.addFailureAtNode(node, "Class element not used publicly.");
+                        }
+                    }
             }
             node.forEachChild(cb);
         }
         sourceFile.forEachChild(cb);
     }
 
-    handleProp(p: PropertyDeclarationLike): void {
+    private handleProp(p: PropertyDeclarationLike): void {
         if (!ts.isIdentifier(p.name)) {
             return;
         }
@@ -124,6 +139,28 @@ class Walker extends Lint.AbstractWalker<Options> {
     }
 }
 
+//todo: handle overloads
+function isOverload(node: ElementOfClass, checker: ts.TypeChecker): boolean {
+    return ts.isMethodDeclaration(node) && checker.getSymbolAtLocation(node.name)!.declarations!.length !== 1;
+}
+
+//handle interface too
+function isDeprecated(node: ElementOfClass, checker: ts.TypeChecker) {
+    const sym = checker.getSymbolAtLocation(node.name)!;
+    return getSymbolDeprecation(sym) !== undefined
+        || node.parent.name && getSymbolDeprecation(checker.getSymbolAtLocation(node.parent.name)!) !== undefined;
+}
+
+function isOverride(node: ElementOfClass, checker: ts.TypeChecker): boolean { //test
+    const name = node.name.text;
+    //const sym = checker.getSymbolAtLocation(node)!;
+    const { heritageClauses } = node.parent;
+    return heritageClauses !== undefined && heritageClauses.some(clause =>
+        clause.types.some(typeNode =>
+            checker.getPropertyOfType(checker.getTypeFromTypeNode(typeNode), name) !== undefined));
+}
+
+
 function getThePropertySymbol(p: ts.ParameterDeclaration, checker: ts.TypeChecker) { //name
     return checker.getSymbolsOfParameterPropertyDeclaration(p, (p.name as ts.Identifier).text)
         .find(s => isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
@@ -146,15 +183,17 @@ function getInfoWorker(program: ts.Program): Info {
 
 interface Info {
     readonly properties: ReadonlyMap<ts.Symbol, PropertyInfo>;
+    readonly classElementsUsedPublicly: ReadonlySet<ts.ClassElement>;
 }
 
 //name
 class Foo {
     constructor(private readonly checker: ts.TypeChecker) {}
     private readonly properties = new Map<ts.Symbol, PropertyInfo>();
+    private readonly classElementsUsedPublicly = new Set<ts.ClassElement>();
 
     finish(): Info {
-        return { properties: this.properties };
+        return { properties: this.properties, classElementsUsedPublicly: this.classElementsUsedPublicly };
     }
 
     analyze(file: ts.SourceFile): void {
@@ -181,7 +220,7 @@ class Foo {
         cb(file, undefined);
     }
 
-    trackSymbolUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {
+    private trackSymbolUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {
         const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(sym, this.checker); //name
         if (xx) {
             sym = xx;
@@ -215,18 +254,28 @@ class Foo {
                 this.trackPropertyUse(node, s, currentClass);
             }
         }
+        else {
+            for (const s of this.checker.getRootSymbols(sym)) {
+                const v = s.valueDeclaration; //name
+                if (v !== undefined && isElementOfClass(v)) {
+                    if (v.parent !== currentClass) {
+                        this.classElementsUsedPublicly.add(v);
+                    }
+                }
+            }
+        }
 
         //todo: handle other kinds of things (methods)
     }
 
-    trackPropertyUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {//name
-        if (!sym.declarations) {
-            return; //how does this happen?
+   private  trackPropertyUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {//name
+        if (sym.declarations === undefined) {
+            return;
         }
+
         const info = createIfNotSet(this.properties, sym, () => new PropertyInfo());
         const newFlags = accessFlags(node, sym);
-        const isPrivate = sym.declarations!.some(d => d.parent === currentClass);
-        if (isPrivate) {
+        if (sym.declarations.some(d => d.parent === currentClass)) {
             info.private = info.private | newFlags;
         } else {
             info.public = info.public | newFlags;
@@ -234,112 +283,10 @@ class Foo {
     }
 }
 
-//taken from findALlReferences.ts
-//TODO: should be a method on checker
-function getObjectBindingElementWithoutPropertyName(symbol: ts.Symbol): ts.BindingElement | undefined {
-    const bindingElement = symbol.declarations && symbol.declarations.find(ts.isBindingElement);
-    //console.log(symbol.declarations![0].getText());
-    if (bindingElement &&
-        bindingElement.parent!.kind === ts.SyntaxKind.ObjectBindingPattern &&
-        !bindingElement.propertyName) {
-        return bindingElement;
-    }
-    return undefined; //neater
-}
-function getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
-    const bindingElement = getObjectBindingElementWithoutPropertyName(symbol);
-    //console.log("??");
-    if (!bindingElement) return undefined;
-    //console.log("??");
-
-    const typeOfPattern = checker.getTypeAtLocation(bindingElement.parent!);
-    const propSymbol = typeOfPattern && checker.getPropertyOfType(typeOfPattern, (<ts.Identifier>bindingElement.name).text);
-    if (propSymbol && propSymbol.flags & ts.SymbolFlags.Accessor) {
-        // See GH#16922
-        assert(!!(propSymbol.flags & ts.SymbolFlags.Transient));
-        return (propSymbol as any/*ts.TransientSymbol*/).target;
-    }
-    return propSymbol;
-}
-function getContainingObjectLiteralElement(node: ts.Node): ts.ObjectLiteralElement | undefined {
-    switch (node.kind) {
-        case ts.SyntaxKind.StringLiteral:
-        case ts.SyntaxKind.NumericLiteral:
-            if (node.parent!.kind === ts.SyntaxKind.ComputedPropertyName) {
-                return isObjectLiteralElement(node.parent!.parent!) ? node.parent!.parent as ts.ObjectLiteralElement : undefined;
-            }
-        // falls through
-        case ts.SyntaxKind.Identifier:
-            return isObjectLiteralElement(node.parent!) &&
-                (node.parent!.parent!.kind === ts.SyntaxKind.ObjectLiteralExpression || node.parent!.parent!.kind === ts.SyntaxKind.JsxAttributes) &&
-                (<ts.ObjectLiteralElement>node.parent).name === node ? node.parent as ts.ObjectLiteralElement : undefined;
-    }
-    return undefined;
-}
-function isObjectLiteralElement(node: ts.Node): node is ts.ObjectLiteralElement {
-    switch (node.kind) {
-        case ts.SyntaxKind.JsxAttribute:
-        case ts.SyntaxKind.JsxSpreadAttribute:
-        case ts.SyntaxKind.PropertyAssignment:
-        case ts.SyntaxKind.ShorthandPropertyAssignment:
-        case ts.SyntaxKind.MethodDeclaration:
-        case ts.SyntaxKind.GetAccessor:
-        case ts.SyntaxKind.SetAccessor:
-            return true;
-    }
-    return false;
-}
-/** Gets all symbols for one property. Does not get symbols for every property. */
-function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, checker: ts.TypeChecker): ts.Symbol[] {
-    const objectLiteral = <ts.ObjectLiteralExpression>node.parent; //todo: update typedef so don't need cast
-    const contextualType = checker.getContextualType(objectLiteral);
-    const name = getNameFromObjectLiteralElement(node);
-    if (name && contextualType) {
-        const result: ts.Symbol[] = [];
-        const symbol = contextualType.getProperty(name);
-        if (symbol) {
-            result.push(symbol);
-        }
-
-        if (contextualType.flags & ts.TypeFlags.Union) {
-            for (const t of (<ts.UnionType>contextualType).types) {
-                const symbol = t.getProperty(name);
-                if (symbol) {
-                    result.push(symbol);
-                }
-            }
-        }
-        return result;
-    }
-    return [];
-}
-function getNameFromObjectLiteralElement(node: ts.ObjectLiteralElement): string | undefined {
-    const name = node.name!;
-    if (name.kind === ts.SyntaxKind.ComputedPropertyName) {
-        const nameExpression = (<ts.ComputedPropertyName>node.name).expression;
-        // treat computed property names where expression is string/numeric literal as just string/numeric literal
-        if (isStringOrNumericLiteral(nameExpression)) {
-            return (<ts.LiteralExpression>nameExpression).text;
-        }
-        return undefined;
-    }
-    return getTextOfIdentifierOrLiteral(name);
-}
-function getTextOfIdentifierOrLiteral(node: ts.Identifier | ts.LiteralLikeNode) {
-    if (node.kind === ts.SyntaxKind.Identifier) {
-        return node.text;
-    }
-    if (node.kind === ts.SyntaxKind.StringLiteral ||
-        node.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral || //todo: add this to ts version
-        node.kind === ts.SyntaxKind.NumericLiteral) {
-        return (node).text;
-    }
-    throw new Error("");//!
-}
-function isStringOrNumericLiteral(node: ts.Node): node is ts.StringLiteral | ts.NumericLiteral {
-    const kind = node.kind;
-    return kind === ts.SyntaxKind.StringLiteral
-        || kind === ts.SyntaxKind.NumericLiteral;
+//TODO: handle non-identifier
+type ElementOfClass = ts.ClassElement & { readonly parent: ts.ClassLikeDeclaration; readonly name: ts.Identifier; };
+function isElementOfClass(node: ts.Node): node is ElementOfClass {
+    return ts.isClassElement(node) && node.name !== undefined && ts.isIdentifier(node.name) && ts.isClassLike(node.parent!);
 }
 
 //!
@@ -452,3 +399,118 @@ function isAssignmentOperator(token: ts.SyntaxKind): boolean {
     return token >= ts.SyntaxKind.FirstAssignment && token <= ts.SyntaxKind.LastAssignment;
 }
 
+
+
+
+
+
+
+
+
+//taken from findALlReferences.ts
+//TODO: should be a method on checker
+function getObjectBindingElementWithoutPropertyName(symbol: ts.Symbol): ts.BindingElement | undefined {
+    const bindingElement = symbol.declarations && symbol.declarations.find(ts.isBindingElement);
+    //console.log(symbol.declarations![0].getText());
+    if (bindingElement &&
+        bindingElement.parent!.kind === ts.SyntaxKind.ObjectBindingPattern &&
+        !bindingElement.propertyName) {
+        return bindingElement;
+    }
+    return undefined; //neater
+}
+function getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
+    const bindingElement = getObjectBindingElementWithoutPropertyName(symbol);
+    //console.log("??");
+    if (!bindingElement) return undefined;
+    //console.log("??");
+
+    const typeOfPattern = checker.getTypeAtLocation(bindingElement.parent!);
+    const propSymbol = typeOfPattern && checker.getPropertyOfType(typeOfPattern, (<ts.Identifier>bindingElement.name).text);
+    if (propSymbol && propSymbol.flags & ts.SymbolFlags.Accessor) {
+        // See GH#16922
+        assert(!!(propSymbol.flags & ts.SymbolFlags.Transient));
+        return (propSymbol as any/*ts.TransientSymbol*/).target;
+    }
+    return propSymbol;
+}
+function getContainingObjectLiteralElement(node: ts.Node): ts.ObjectLiteralElement | undefined {
+    switch (node.kind) {
+        case ts.SyntaxKind.StringLiteral:
+        case ts.SyntaxKind.NumericLiteral:
+            if (node.parent!.kind === ts.SyntaxKind.ComputedPropertyName) {
+                return isObjectLiteralElement(node.parent!.parent!) ? node.parent!.parent as ts.ObjectLiteralElement : undefined;
+            }
+        // falls through
+        case ts.SyntaxKind.Identifier:
+            return isObjectLiteralElement(node.parent!) &&
+                (node.parent!.parent!.kind === ts.SyntaxKind.ObjectLiteralExpression || node.parent!.parent!.kind === ts.SyntaxKind.JsxAttributes) &&
+                (<ts.ObjectLiteralElement>node.parent).name === node ? node.parent as ts.ObjectLiteralElement : undefined;
+    }
+    return undefined;
+}
+function isObjectLiteralElement(node: ts.Node): node is ts.ObjectLiteralElement {
+    switch (node.kind) {
+        case ts.SyntaxKind.JsxAttribute:
+        case ts.SyntaxKind.JsxSpreadAttribute:
+        case ts.SyntaxKind.PropertyAssignment:
+        case ts.SyntaxKind.ShorthandPropertyAssignment:
+        case ts.SyntaxKind.MethodDeclaration:
+        case ts.SyntaxKind.GetAccessor:
+        case ts.SyntaxKind.SetAccessor:
+            return true;
+    }
+    return false;
+}
+/** Gets all symbols for one property. Does not get symbols for every property. */
+function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, checker: ts.TypeChecker): ts.Symbol[] {
+    const objectLiteral = <ts.ObjectLiteralExpression>node.parent; //todo: update typedef so don't need cast
+    const contextualType = checker.getContextualType(objectLiteral);
+    const name = getNameFromObjectLiteralElement(node);
+    if (name && contextualType) {
+        const result: ts.Symbol[] = [];
+        const symbol = contextualType.getProperty(name);
+        if (symbol) {
+            result.push(symbol);
+        }
+
+        if (contextualType.flags & ts.TypeFlags.Union) {
+            for (const t of (<ts.UnionType>contextualType).types) {
+                const symbol = t.getProperty(name);
+                if (symbol) {
+                    result.push(symbol);
+                }
+            }
+        }
+        return result;
+    }
+    return [];
+}
+function getNameFromObjectLiteralElement(node: ts.ObjectLiteralElement): string | undefined {
+    const name = node.name!;
+    if (name.kind === ts.SyntaxKind.ComputedPropertyName) {
+        const nameExpression = (<ts.ComputedPropertyName>node.name).expression;
+        // treat computed property names where expression is string/numeric literal as just string/numeric literal
+        if (isStringOrNumericLiteral(nameExpression)) {
+            return (<ts.LiteralExpression>nameExpression).text;
+        }
+        return undefined;
+    }
+    return getTextOfIdentifierOrLiteral(name);
+}
+function getTextOfIdentifierOrLiteral(node: ts.Identifier | ts.LiteralLikeNode) {
+    if (node.kind === ts.SyntaxKind.Identifier) {
+        return node.text;
+    }
+    if (node.kind === ts.SyntaxKind.StringLiteral ||
+        node.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral || //todo: add this to ts version
+        node.kind === ts.SyntaxKind.NumericLiteral) {
+        return (node).text;
+    }
+    throw new Error("");//!
+}
+function isStringOrNumericLiteral(node: ts.Node): node is ts.StringLiteral | ts.NumericLiteral {
+    const kind = node.kind;
+    return kind === ts.SyntaxKind.StringLiteral
+        || kind === ts.SyntaxKind.NumericLiteral;
+}

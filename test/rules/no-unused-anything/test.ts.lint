@@ -1,4 +1,4 @@
-type T = { readonly a: {} } & { readonly a: number };
-function f(t: T) {
-    t.a;
+class C {
+    m() {}
 }
+new C().m();
