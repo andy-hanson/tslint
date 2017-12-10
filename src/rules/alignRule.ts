@@ -27,11 +27,11 @@ const OPTION_PARAMETERS = "parameters";
 const OPTION_ARGUMENTS = "arguments";
 
 interface Options {
-    statements: boolean;
-    parameters: boolean;
-    arguments: boolean;
-    members: boolean;
-    elements: boolean;
+    readonly statements: boolean;
+    readonly parameters: boolean;
+    readonly arguments: boolean;
+    readonly members: boolean;
+    readonly elements: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -65,7 +65,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_SUFFIX = " are not aligned";
+    public static readonly FAILURE_STRING_SUFFIX = " are not aligned";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithWalker(new AlignWalker(sourceFile, this.ruleName, {

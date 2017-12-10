@@ -34,7 +34,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING =
+    public static readonly FAILURE_STRING =
             "Throwing plain strings (not instances of Error) gives no stack traces";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {

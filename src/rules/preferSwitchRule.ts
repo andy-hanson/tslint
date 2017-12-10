@@ -43,7 +43,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Use a switch statement instead of using multiple '===' checks.";
+    public static readonly FAILURE_STRING = "Use a switch statement instead of using multiple '===' checks.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         let minCases = 3;

@@ -21,7 +21,7 @@ import * as ts from "typescript";
 import * as Lint from "../index";
 
 interface Options {
-    size: number;
+    readonly size: number;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -39,7 +39,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_NO_SPACE = "Whitespace within parentheses is not allowed";
+    public static readonly FAILURE_NO_SPACE = "Whitespace within parentheses is not allowed";
     public static FAILURE_NEEDS_SPACE(count: number): string {
          return `Needs ${count} whitespace${count > 1 ? "s" : ""} within parentheses`;
     }

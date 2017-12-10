@@ -36,10 +36,10 @@ const OPTION_CHECK_CONSTRUCTOR = "check-constructor";
 const OPTION_CHECK_PARAMETER_PROPERTY = "check-parameter-property";
 
 interface Options {
-    noPublic: boolean;
-    checkAccessor: boolean;
-    checkConstructor: boolean;
-    checkParameterProperty: boolean;
+    readonly noPublic: boolean;
+    readonly checkAccessor: boolean;
+    readonly checkConstructor: boolean;
+    readonly checkParameterProperty: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -71,7 +71,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_NO_PUBLIC = "'public' is implicit.";
+    public static readonly FAILURE_STRING_NO_PUBLIC = "'public' is implicit.";
 
     public static FAILURE_STRING_FACTORY(memberType: string, memberName: string | undefined): string {
         memberName = memberName === undefined ? "" : ` '${memberName}'`;

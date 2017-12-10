@@ -24,8 +24,8 @@ const OPTION_IGNORE_CASE = "ignore-case";
 const OPTION_MATCH_DECLARATION_ORDER = "match-declaration-order";
 
 interface Options {
-    ignoreCase: boolean;
-    matchDeclarationOrder: boolean;
+    readonly ignoreCase: boolean;
+    readonly matchDeclarationOrder: boolean;
 }
 
 export class Rule extends Lint.Rules.OptionallyTypedRule {
@@ -159,7 +159,7 @@ function walk(ctx: Lint.WalkContext<Options>, checker?: ts.TypeChecker): void {
     function checkMatchesDeclarationOrder(
         { properties }: ts.ObjectLiteralExpression,
         type: TypeLike,
-        members: ReadonlyArray<{ name: ts.PropertyName }>,
+        members: ReadonlyArray<{ readonly name: ts.PropertyName }>,
     ): void {
 
         let memberIndex = 0;

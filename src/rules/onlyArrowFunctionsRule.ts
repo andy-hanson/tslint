@@ -50,7 +50,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "non-arrow functions are forbidden";
+    public static readonly FAILURE_STRING = "non-arrow functions are forbidden";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, parseOptions(this.ruleArguments));
@@ -58,8 +58,8 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 interface Options {
-    allowDeclarations: boolean;
-    allowNamedFunctions: boolean;
+    readonly allowDeclarations: boolean;
+    readonly allowNamedFunctions: boolean;
 }
 function parseOptions(ruleArguments: string[]): Options {
     return {

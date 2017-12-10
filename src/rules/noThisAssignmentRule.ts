@@ -24,8 +24,8 @@ const ALLOW_THIS_DESTRUCTURING = "allow-destructuring";
 const ALLOWED_THIS_NAMES = "allowed-names";
 
 interface Options {
-    allowedNames: string[];
-    allowDestructuring: boolean;
+    readonly allowedNames: string[];
+    readonly allowDestructuring: boolean;
 }
 
 interface ConfigOptions {
@@ -86,7 +86,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         typescriptOnly: false,
     };
 
-    public static FAILURE_STRING_BINDINGS = "Don't assign members of `this` to local variables.";
+    public static readonly FAILURE_STRING_BINDINGS = "Don't assign members of `this` to local variables.";
 
     public static FAILURE_STRING_FACTORY_IDENTIFIERS(name: string) {
         return `Assigning \`this\` reference to local variable not allowed: ${name}.`;

@@ -35,7 +35,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "require statement not part of an import statement";
+    public static readonly FAILURE_STRING = "require statement not part of an import statement";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const requiresWalker = new NoVarRequiresWalker(sourceFile, this.getOptions());

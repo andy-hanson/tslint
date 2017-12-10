@@ -80,9 +80,9 @@ export type Visibility = All
     | typeof VISIBILITY_INTERNAL;
 
 export class Rule extends Lint.Rules.TypedRule {
-    public static FAILURE_STRING_EXIST = "Documentation must exist for ";
+    public static readonly FAILURE_STRING_EXIST = "Documentation must exist for ";
 
-    public static defaultArguments: IInputExclusionDescriptors = {
+    private static readonly defaultArguments: IInputExclusionDescriptors = {
         [ARGUMENT_CLASSES]: true,
         [ARGUMENT_FUNCTIONS]: true,
         [ARGUMENT_METHODS]: {
@@ -109,7 +109,7 @@ export class Rule extends Lint.Rules.TypedRule {
         },
     };
 
-    public static ARGUMENT_DESCRIPTOR_BLOCK = {
+    private static readonly ARGUMENT_DESCRIPTOR_BLOCK = {
         properties: {
             [DESCRIPTOR_TAGS]: {
                 properties: {
@@ -139,7 +139,7 @@ export class Rule extends Lint.Rules.TypedRule {
         type: "object",
     };
 
-    public static ARGUMENT_DESCRIPTOR_CLASS = {
+    private static readonly ARGUMENT_DESCRIPTOR_CLASS = {
         properties: {
             [DESCRIPTOR_TAGS]: {
                 properties: {

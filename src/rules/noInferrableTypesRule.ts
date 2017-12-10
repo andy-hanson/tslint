@@ -24,8 +24,8 @@ const OPTION_IGNORE_PARMS = "ignore-params";
 const OPTION_IGNORE_PROPERTIES = "ignore-properties";
 
 interface Options {
-    ignoreParameters: boolean;
-    ignoreProperties: boolean;
+    readonly ignoreParameters: boolean;
+    readonly ignoreProperties: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {

@@ -69,8 +69,8 @@ export class Rule extends Lint.Rules.AbstractRule {
         hasFix: true,
     };
 
-    public static FAILURE_STRING_MISSING = "missing whitespace";
-    public static FAILURE_STRING_INVALID = "invalid whitespace";
+    public static readonly FAILURE_STRING_MISSING = "missing whitespace";
+    public static readonly FAILURE_STRING_INVALID = "invalid whitespace";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, parseOptions(this.ruleArguments));

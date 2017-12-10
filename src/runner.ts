@@ -37,73 +37,73 @@ export interface Options {
     /**
      * Path to a configuration file.
      */
-    config?: string;
+    readonly config?: string;
 
     /**
      * Exclude globs from path expansion.
      */
-    exclude: string[];
+    readonly exclude: string[];
 
     /**
      * File paths to lint.
      */
-    files: string[];
+    readonly files: string[];
 
     /**
      * Whether to return status code 0 even if there are lint errors.
      */
-    force?: boolean;
+    readonly force?: boolean;
 
     /**
      * Whether to fixes linting errors for select rules. This may overwrite linted files.
      */
-    fix?: boolean;
+    readonly fix?: boolean;
 
     /**
      * Output format.
      */
-    format?: string;
+    readonly format?: string;
 
     /**
      * Formatters directory path.
      */
-    formattersDirectory?: string;
+    readonly formattersDirectory?: string;
 
     /**
      * Whether to generate a tslint.json config file in the current working directory.
      */
-    init?: boolean;
+    readonly init?: boolean;
 
     /**
      * Output file path.
      */
-    out?: string;
+    readonly out?: string;
 
     /**
      * Whether to output absolute paths
      */
-    outputAbsolutePaths?: boolean;
+    readonly outputAbsolutePaths?: boolean;
 
     /**
      * tsconfig.json file.
      */
-    project?: string;
+    readonly project?: string;
 
     /**
      * Rules directory paths.
      */
-    rulesDirectory?: string | string[];
+    readonly rulesDirectory?: string | string[];
 
     /**
      * Run the tests in the given directories to ensure a (custom) TSLint rule's output matches the expected output.
      * When this property is `true` the `files` property is used to specify the directories from which the tests should be executed.
      */
-    test?: boolean;
+    readonly test?: boolean;
 
     /**
      * Whether to enable type checking when linting a project.
      */
-    typeCheck?: boolean;
+    readonly typeCheck?: boolean;
 }
 
 export const enum Status {
@@ -176,7 +176,7 @@ async function runLinter(options: Options, logger: Logger): Promise<LintResult> 
 function resolveFilesAndProgram(
     { files, project, exclude, outputAbsolutePaths }: Options,
     logger: Logger,
-): { files: string[]; program?: ts.Program } {
+): { readonly files: string[]; readonly program?: ts.Program } {
     // remove single quotes which break matching on Windows when glob is passed in single quotes
     exclude = exclude.map(trimSingleQuotes);
 

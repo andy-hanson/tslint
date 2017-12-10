@@ -56,8 +56,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static ALIGNMENT_FAILURE_STRING = "asterisks in jsdoc must be aligned";
-    public static FORMAT_FAILURE_STRING = "jsdoc is not formatted correctly on this line";
+    public static readonly ALIGNMENT_FAILURE_STRING = "asterisks in jsdoc must be aligned";
+    public static readonly FORMAT_FAILURE_STRING = "jsdoc is not formatted correctly on this line";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, {
@@ -67,7 +67,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 interface Options {
-    firstLineOfMultiline: boolean;
+    readonly firstLineOfMultiline: boolean;
 }
 
 function walk(ctx: Lint.WalkContext<Options>) {

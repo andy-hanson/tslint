@@ -35,11 +35,11 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_MISSING =
+    public static readonly FAILURE_STRING_MISSING =
         "Expected type literal to use ';' to separate members.";
-    public static FAILURE_STRING_COMMA =
+    public static readonly FAILURE_STRING_COMMA =
         "Expected type literal to use ';' instead of ','.";
-    public static FAILURE_STRING_TRAILING =
+    public static readonly FAILURE_STRING_TRAILING =
         "Did not expect single-line type literal to have a trailing ';'.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {

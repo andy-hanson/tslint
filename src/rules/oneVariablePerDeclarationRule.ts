@@ -46,14 +46,14 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Multiple variable declarations in the same statement are forbidden";
+    public static readonly FAILURE_STRING = "Multiple variable declarations in the same statement are forbidden";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, { ignoreForLoop: this.ruleArguments.indexOf(OPTION_IGNORE_FOR_LOOP) !== -1 });
     }
 }
 
-function walk(ctx: Lint.WalkContext<{ ignoreForLoop: boolean }>): void {
+function walk(ctx: Lint.WalkContext<{ readonly ignoreForLoop: boolean }>): void {
     ts.forEachChild(ctx.sourceFile, function cb(node) {
         if (isVariableStatement(node) && node.declarationList.declarations.length > 1) {
             ctx.addFailureAtNode(node, Rule.FAILURE_STRING);

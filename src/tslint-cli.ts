@@ -25,30 +25,28 @@ import { run } from "./runner";
 import { arrayify, dedent } from "./utils";
 
 interface Argv {
-    config?: string;
-    exclude: string[];
-    fix?: boolean;
-    force?: boolean;
-    help?: boolean;
-    init?: boolean;
-    out?: string;
-    outputAbsolutePaths: boolean;
-    project?: string;
-    rulesDir?: string;
-    formattersDir: string;
-    format?: string;
-    typeCheck?: boolean;
-    test?: boolean;
-    version?: boolean;
+    readonly config?: string;
+    readonly exclude: string[];
+    readonly fix?: boolean;
+    readonly force?: boolean;
+    readonly init?: boolean;
+    readonly out?: string;
+    readonly outputAbsolutePaths: boolean;
+    readonly project?: string;
+    readonly rulesDir?: string;
+    readonly formattersDir: string;
+    readonly format?: string;
+    readonly typeCheck?: boolean;
+    readonly test?: boolean;
 }
 
 interface Option {
-    short?: string;
+    readonly short?: string;
     // Commander will camelCase option names.
-    name: keyof Argv | "rules-dir" | "formatters-dir" | "type-check";
-    type: "string" | "boolean" | "array";
-    describe: string; // Short, used for usage message
-    description: string; // Long, used for `--help`
+    readonly name: keyof Argv | "version" | "help" | "rules-dir" | "formatters-dir" | "type-check";
+    readonly type: "string" | "boolean" | "array";
+    readonly describe: string; // Short, used for usage message
+    readonly description: string; // Long, used for `--help`
 }
 
 const options: Option[] = [

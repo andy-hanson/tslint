@@ -27,9 +27,9 @@ import {
 } from "tsutils";
 
 interface Options {
-    allowConstructorOnly: boolean;
-    allowEmptyClass: boolean;
-    allowStaticOnly: boolean;
+    readonly allowConstructorOnly: boolean;
+    readonly allowEmptyClass: boolean;
+    readonly allowStaticOnly: boolean;
 }
 
 const OPTION__ALLOW_CONSTRUCTOR_ONLY = "allow-constructor-only";
@@ -74,9 +74,9 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_CONSTRUCTOR_ONLY = "Every member of this class is a constructor. Use functions instead.";
-    public static FAILURE_STATIC_ONLY = "Every member of this class is static. Use namespaces or plain objects instead.";
-    public static FAILURE_EMPTY_CLASS = "This class has no members.";
+    public static readonly FAILURE_CONSTRUCTOR_ONLY = "Every member of this class is a constructor. Use functions instead.";
+    public static readonly FAILURE_STATIC_ONLY = "Every member of this class is static. Use namespaces or plain objects instead.";
+    public static readonly FAILURE_EMPTY_CLASS = "This class has no members.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithWalker(

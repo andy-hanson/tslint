@@ -42,7 +42,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         typescriptOnly: false,
     };
 
-    public static FAILURE_STRING = "This import is blacklisted, import a submodule instead";
+    public static readonly FAILURE_STRING = "This import is blacklisted, import a submodule instead";
 
     public isEnabled(): boolean {
         return super.isEnabled() && this.ruleArguments.length > 0;

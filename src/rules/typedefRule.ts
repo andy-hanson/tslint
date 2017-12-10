@@ -22,7 +22,8 @@ import * as Lint from "../index";
 
 interface Options {
     "call-signature"?: boolean;
-    "arrow-call-signature"?: boolean;
+    "arrow-call-signature"?: boolean; //todo: no-unused-anything should handle strings
+    // tslint:disable-next-line no-unused-anything (TODO: this is unused!)
     parameter?: boolean;
     "arrow-parameter"?: boolean;
     "property-declaration"?: boolean;
@@ -44,7 +45,7 @@ const OPTION_OBJECT_DESTRUCTURING: Option = "object-destructuring";
 const OPTION_ARRAY_DESTRUCTURING: Option = "array-destructuring";
 
 function parseOptions(ruleArguments: Option[]) {
-    const options: Options = {};
+    const options: Partial<Record<keyof Options, boolean>> = {};
     for (const arg of ruleArguments) {
         options[arg] = true;
     }

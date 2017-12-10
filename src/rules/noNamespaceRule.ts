@@ -23,7 +23,7 @@ import * as Lint from "../index";
 const OPTION_ALLOW_DECLARATIONS = "allow-declarations";
 
 interface Options {
-    allowDeclarations: boolean;
+    readonly allowDeclarations: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -54,7 +54,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "'namespace' and 'module' are disallowed";
+    public static readonly FAILURE_STRING = "'namespace' and 'module' are disallowed";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, {

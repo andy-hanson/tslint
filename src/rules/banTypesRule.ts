@@ -21,8 +21,8 @@ import * as ts from "typescript";
 import * as Lint from "../index";
 
 interface Option {
-    pattern: RegExp;
-    message?: string;
+    readonly pattern: RegExp;
+    readonly message?: string;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {

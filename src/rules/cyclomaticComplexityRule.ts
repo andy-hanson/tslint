@@ -21,8 +21,8 @@ import * as Lint from "../index";
 
 export class Rule extends Lint.Rules.AbstractRule {
 
-    public static DEFAULT_THRESHOLD = 20;
-    public static MINIMUM_THRESHOLD = 2;
+    private static readonly DEFAULT_THRESHOLD = 20;
+    private static readonly MINIMUM_THRESHOLD = 2;
 
     /* tslint:disable:object-literal-sort-keys */
     public static metadata: Lint.IRuleMetadata = {
@@ -79,7 +79,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     }
 }
 
-function walk(ctx: Lint.WalkContext<{ threshold: number }>): void {
+function walk(ctx: Lint.WalkContext<{ readonly threshold: number }>): void {
     const { options: { threshold } } = ctx;
     let complexity = 0;
 

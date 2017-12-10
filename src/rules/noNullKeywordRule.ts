@@ -39,7 +39,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Use 'undefined' instead of 'null'";
+    public static readonly FAILURE_STRING = "Use 'undefined' instead of 'null'";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);

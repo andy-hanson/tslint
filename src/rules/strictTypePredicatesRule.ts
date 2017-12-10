@@ -44,7 +44,7 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_BAD_TYPEOF = "Bad comparison for 'typeof'.";
+    public static readonly FAILURE_STRING_BAD_TYPEOF = "Bad comparison for 'typeof'.";
 
     public static FAILURE_STRING(value: boolean): string {
         return `Expression is always ${value}.`;
@@ -161,17 +161,17 @@ function isEmptyType(checker: ts.TypeChecker, type: ts.Type) {
 
 const undefinedFlags = ts.TypeFlags.Undefined | ts.TypeFlags.Void;
 
-type TypePredicate = PlainTypePredicate | NonStrictNullUndefinedPredicate | { kind: TypePredicateKind.TypeofTypo };
+type TypePredicate = PlainTypePredicate | NonStrictNullUndefinedPredicate | { readonly kind: TypePredicateKind.TypeofTypo };
 interface PlainTypePredicate {
-    kind: TypePredicateKind.Plain;
-    expression: ts.Expression;
-    predicate: Predicate;
-    isNullOrUndefined: boolean;
+    readonly kind: TypePredicateKind.Plain;
+    readonly expression: ts.Expression;
+    readonly predicate: Predicate;
+    readonly isNullOrUndefined: boolean;
 }
 /** For `== null` and the like. */
 interface NonStrictNullUndefinedPredicate {
-    kind: TypePredicateKind.NonStructNullUndefined;
-    expression: ts.Expression;
+    readonly kind: TypePredicateKind.NonStructNullUndefined;
+    readonly expression: ts.Expression;
 }
 const enum TypePredicateKind {
     Plain,

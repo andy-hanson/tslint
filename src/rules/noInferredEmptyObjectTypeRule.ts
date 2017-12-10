@@ -33,8 +33,8 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static EMPTY_INTERFACE_INSTANCE = "Explicit type parameter needs to be provided to the constructor";
-    public static EMPTY_INTERFACE_FUNCTION = "Explicit type parameter needs to be provided to the function call";
+    public static readonly EMPTY_INTERFACE_INSTANCE = "Explicit type parameter needs to be provided to the constructor";
+    public static readonly EMPTY_INTERFACE_FUNCTION = "Explicit type parameter needs to be provided to the function call";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
         return this.applyWithWalker(new NoInferredEmptyObjectTypeRule(sourceFile, this.ruleName, program.getTypeChecker()));

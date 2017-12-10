@@ -49,8 +49,8 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Invalid 'await' of a non-Promise value.";
-    public static FAILURE_FOR_AWAIT_OF = "Invalid 'for-await-of' of a non-AsyncIterable value.";
+    public static readonly FAILURE_STRING = "Invalid 'await' of a non-Promise value.";
+    public static readonly FAILURE_FOR_AWAIT_OF = "Invalid 'for-await-of' of a non-AsyncIterable value.";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
         const promiseTypes = new Set(["Promise", ...this.ruleArguments as string[]]);

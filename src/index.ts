@@ -35,17 +35,17 @@ export * from "./language/walker";
 export * from "./language/formatter/formatter";
 
 export interface LintResult {
-    errorCount: number;
-    warningCount: number;
-    failures: RuleFailure[];
-    fixes?: RuleFailure[];
-    format: string | FormatterConstructor;
-    output: string;
+    readonly errorCount: number;
+    readonly warningCount: number;
+    readonly failures: RuleFailure[];
+    readonly fixes?: RuleFailure[];
+    readonly format: string | FormatterConstructor;
+    readonly output: string;
 }
 
 export interface ILinterOptions {
-    fix: boolean;
-    formatter?: string | FormatterConstructor;
-    formattersDirectory?: string;
-    rulesDirectory?: string | string[];
+    readonly fix: boolean;
+    readonly formatter?: string | FormatterConstructor;
+    readonly formattersDirectory?: string;
+    readonly rulesDirectory?: string | string[];
 }

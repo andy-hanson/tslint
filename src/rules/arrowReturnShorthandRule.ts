@@ -55,7 +55,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 interface Options {
-    multiline: boolean;
+    readonly multiline: boolean;
 }
 
 function walk(ctx: Lint.WalkContext<Options>): void {

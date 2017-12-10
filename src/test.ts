@@ -34,23 +34,23 @@ const MARKUP_FILE_EXTENSION = ".lint";
 const FIXES_FILE_EXTENSION = ".fix";
 
 export interface TestOutput {
-    skipped: false;
-    errorsFromLinter: LintError[];
-    errorsFromMarkup: LintError[];
-    fixesFromLinter: string;
-    fixesFromMarkup: string;
-    markupFromLinter: string;
-    markupFromMarkup: string;
+    readonly skipped: false;
+    readonly errorsFromLinter: LintError[];
+    readonly errorsFromMarkup: LintError[];
+    readonly fixesFromLinter: string;
+    readonly fixesFromMarkup: string;
+    readonly markupFromLinter: string;
+    readonly markupFromMarkup: string;
 }
 
 export interface SkippedTest {
-    skipped: true;
-    requirement: string;
+    readonly skipped: true;
+    readonly requirement: string;
 }
 
 export interface TestResult {
-    directory: string;
-    results: {
+    readonly directory: string;
+    readonly results: {
         [fileName: string]: TestOutput | SkippedTest;
     };
 }

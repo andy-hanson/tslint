@@ -23,7 +23,7 @@ import * as Lint from "../index";
 const BAN_SINGLE_ARG_PARENS = "ban-single-arg-parens";
 
 interface Options {
-    banSingleArgParens: boolean;
+    readonly banSingleArgParens: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -46,8 +46,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_MISSING = "Parentheses are required around the parameters of an arrow function definition";
-    public static FAILURE_STRING_EXISTS = "Parentheses are prohibited around the parameter in this single parameter arrow function";
+    public static readonly FAILURE_STRING_MISSING = "Parentheses are required around the parameters of an arrow function definition";
+    public static readonly FAILURE_STRING_EXISTS = "Parentheses are prohibited around the parameter in this single parameter arrow function";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, {

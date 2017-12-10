@@ -43,8 +43,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_ALWAYS = "Final clause in 'switch' statement should end with 'break;'.";
-    public static FAILURE_STRING_NEVER = "Final clause in 'switch' statement should not end with 'break;'.";
+    public static readonly FAILURE_STRING_ALWAYS = "Final clause in 'switch' statement should end with 'break;'.";
+    public static readonly FAILURE_STRING_NEVER = "Final clause in 'switch' statement should not end with 'break;'.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, { always: this.ruleArguments.indexOf(OPTION_ALWAYS) !== -1 });
@@ -52,7 +52,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 interface Options {
-    always: boolean;
+    readonly always: boolean;
 }
 
 function walk(ctx: Lint.WalkContext<Options>): void {

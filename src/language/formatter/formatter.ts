@@ -21,27 +21,27 @@ export interface IFormatterMetadata {
     /**
      * The name of the formatter.
      */
-    formatterName: string;
+    readonly formatterName: string;
 
     /**
      * A short, one line description of what the formatter does.
      */
-    description: string;
+    readonly description: string;
 
     /**
      * More elaborate details about the formatter.
      */
-    descriptionDetails?: string;
+    readonly descriptionDetails?: string;
 
     /**
      * Sample output from the formatter.
      */
-    sample: string;
+    readonly sample: string;
 
     /**
      * Sample output from the formatter.
      */
-    consumer: ConsumerType;
+    readonly consumer: ConsumerType;
 }
 
 export type ConsumerType = "human" | "machine";

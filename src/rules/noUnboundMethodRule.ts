@@ -22,7 +22,7 @@ import * as Lint from "../index";
 const OPTION_IGNORE_STATIC = "ignore-static";
 
 interface Options {
-    ignoreStatic: boolean;
+    readonly ignoreStatic: boolean;
 }
 
 export class Rule extends Lint.Rules.TypedRule {
@@ -42,7 +42,7 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Avoid referencing unbound methods which may cause unintentional scoping of 'this'.";
+    public static readonly FAILURE_STRING = "Avoid referencing unbound methods which may cause unintentional scoping of 'this'.";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
         return this.applyWithFunction(

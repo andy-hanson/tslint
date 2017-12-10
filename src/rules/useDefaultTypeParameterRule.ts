@@ -34,7 +34,7 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "This is the default value for this type parameter, so it can be omitted.";
+    public static readonly FAILURE_STRING = "This is the default value for this type parameter, so it can be omitted.";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, undefined, program.getTypeChecker());
@@ -42,8 +42,8 @@ export class Rule extends Lint.Rules.TypedRule {
 }
 
 interface ArgsAndParams {
-    typeArguments: ts.NodeArray<ts.TypeNode>;
-    typeParameters: ReadonlyArray<ts.TypeParameterDeclaration>;
+    readonly typeArguments: ts.NodeArray<ts.TypeNode>;
+    readonly typeParameters: ReadonlyArray<ts.TypeParameterDeclaration>;
 }
 
 function walk(ctx: Lint.WalkContext<void>, checker: ts.TypeChecker): void {

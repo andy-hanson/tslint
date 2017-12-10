@@ -20,9 +20,9 @@ import * as ts from "typescript";
 import { Exclusion } from "./exclusion";
 
 export interface ITagExclusionDescriptor {
-    tags?: {
-        content: IContentTags;
-        existence: string[];
+    readonly tags?: {
+        readonly content: IContentTags;
+        readonly existence: string[];
     };
 }
 

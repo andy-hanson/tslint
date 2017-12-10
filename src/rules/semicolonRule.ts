@@ -33,8 +33,8 @@ const enum BoundClassMethodOption {
 }
 
 interface Options {
-    boundClassMethods: BoundClassMethodOption;
-    interfaces: boolean;
+    readonly boundClassMethods: BoundClassMethodOption;
+    readonly interfaces: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -81,9 +81,9 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_MISSING = "Missing semicolon";
-    public static FAILURE_STRING_COMMA = "Properties should be separated by semicolons";
-    public static FAILURE_STRING_UNNECESSARY = "Unnecessary semicolon";
+    public static readonly FAILURE_STRING_MISSING = "Missing semicolon";
+    public static readonly FAILURE_STRING_COMMA = "Properties should be separated by semicolons";
+    public static readonly FAILURE_STRING_UNNECESSARY = "Unnecessary semicolon";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const options: Options = {

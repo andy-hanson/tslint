@@ -110,15 +110,14 @@ function parseOptions(option: Partial<Options> | undefined): Options {
 }
 
 interface VariableInfo {
-    identifier: ts.Identifier;
-    tdz: boolean;
+    readonly identifier: ts.Identifier;
+    readonly tdz: boolean;
 }
 
 class Scope {
-    public functionScope: Scope;
-    public variables = new Map<string, VariableInfo[]>();
-    public variablesSeen = new Map<string, ts.Identifier[]>();
-    public reassigned = new Set<string>();
+    public readonly functionScope: Scope;
+    public readonly variables = new Map<string, VariableInfo[]>();
+    public readonly variablesSeen = new Map<string, ts.Identifier[]>();
     constructor(functionScope?: Scope) {
         // if no functionScope is provided we are in the process of creating a new function scope, which for consistency links to itself
         this.functionScope = functionScope !== undefined ? functionScope : this;

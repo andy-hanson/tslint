@@ -109,7 +109,7 @@ function transformName(name: string): string {
 function loadRule(directory: string, ruleName: string): RuleConstructor | "not-found" {
     const ruleFullPath = getRuleFullPath(directory, ruleName);
     if (ruleFullPath !== undefined) {
-        const ruleModule = require(ruleFullPath) as { Rule: RuleConstructor } | undefined;
+        const ruleModule = require(ruleFullPath) as { readonly Rule: RuleConstructor } | undefined;
         if (ruleModule !== undefined) {
             return ruleModule.Rule;
         }

@@ -23,7 +23,7 @@ import * as Lint from "../index";
 const OPTION_CHECK_PARAMETERS = "check-parameters";
 
 interface Options {
-    parameters: boolean;
+    readonly parameters: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {

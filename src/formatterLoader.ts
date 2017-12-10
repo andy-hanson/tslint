@@ -57,7 +57,7 @@ function loadFormatter(...paths: string[]): FormatterConstructor | undefined {
     const fullPath = path.resolve(moduleDirectory, formatterPath);
 
     if (fs.existsSync(`${fullPath}.js`)) {
-        const formatterModule = require(fullPath) as { Formatter: FormatterConstructor };
+        const formatterModule = require(fullPath) as { readonly Formatter: FormatterConstructor };
         return formatterModule.Formatter;
     }
 
@@ -71,5 +71,5 @@ function loadFormatterModule(name: string): FormatterConstructor | undefined {
     } catch (e) {
         return undefined;
     }
-    return (require(src) as { Formatter: FormatterConstructor }).Formatter;
+    return (require(src) as { readonly Formatter: FormatterConstructor }).Formatter;
 }

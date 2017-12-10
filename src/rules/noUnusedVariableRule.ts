@@ -76,8 +76,8 @@ export class Rule extends Lint.Rules.TypedRule {
 }
 
 interface Options {
-    checkParameters: boolean;
-    ignorePattern: RegExp | undefined;
+    readonly checkParameters: boolean;
+    readonly ignorePattern: RegExp | undefined;
 }
 function parseOptions(options: any[]): Options {
     const checkParameters = options.indexOf(OPTION_CHECK_PARAMETERS) !== -1;

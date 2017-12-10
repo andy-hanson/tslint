@@ -20,8 +20,8 @@ import * as ts from "typescript";
 import * as Lint from "../index";
 
 interface Options {
-    excludeClassExpressions: boolean;
-    maxClasses: number;
+    readonly excludeClassExpressions: boolean;
+    readonly maxClasses: number;
 }
 
 const OPTION_EXCLUDE_CLASS_EXPRESSIONS = "exclude-class-expressions";

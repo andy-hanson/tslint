@@ -29,7 +29,7 @@ const OPTION_AS_NEEDED = "as-needed";
 const OPTION_IGNORE_SAME_LINE = "ignore-same-line";
 
 interface Options {
-    ignoreSameLine: boolean;
+    readonly ignoreSameLine: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -75,7 +75,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_AS_NEEDED = "Block contains only one statement; remove the curly braces.";
+    public static readonly FAILURE_STRING_AS_NEEDED = "Block contains only one statement; remove the curly braces.";
     public static FAILURE_STRING_FACTORY(kind: string) {
         return `${kind} statements must be braced`;
     }

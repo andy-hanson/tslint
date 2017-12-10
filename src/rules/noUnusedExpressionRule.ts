@@ -28,9 +28,9 @@ const ALLOW_NEW = "allow-new";
 const ALLOW_TAGGED_TEMPLATE = "allow-tagged-template";
 
 interface Options {
-    allowFastNullChecks: boolean;
-    allowNew: boolean;
-    allowTaggedTemplate: boolean;
+    readonly allowFastNullChecks: boolean;
+    readonly allowNew: boolean;
+    readonly allowTaggedTemplate: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -65,7 +65,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "unused expression, expected an assignment or function call";
+    public static readonly FAILURE_STRING = "unused expression, expected an assignment or function call";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, {

@@ -26,7 +26,7 @@ const OPTION_CONSISTENT_AS_NEEDED = "consistent-as-needed";
 type Option = typeof OPTION_ALWAYS | typeof OPTION_AS_NEEDED | typeof OPTION_CONSISTENT | typeof OPTION_CONSISTENT_AS_NEEDED;
 
 interface Options {
-    option: Option;
+    readonly option: Option;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -74,7 +74,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static INCONSISTENT_PROPERTY = "All property names in this object literal must be consistently quoted or unquoted.";
+    public static readonly INCONSISTENT_PROPERTY = "All property names in this object literal must be consistently quoted or unquoted.";
     public static UNNEEDED_QUOTES(name: string) {
         return `Unnecessarily quoted property '${name}' found.`;
     }

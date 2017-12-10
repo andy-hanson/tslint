@@ -20,6 +20,7 @@ import * as ts from "typescript";
 import { Fix, RuleFailure } from "../rule/rule";
 
 export class WalkContext<T> {
+    // tslint:disable-next-line no-unused-anything (TODO: make this private?)
     public readonly failures: RuleFailure[] = [];
 
     constructor(public readonly sourceFile: ts.SourceFile, public readonly ruleName: string, public readonly options: T) {}

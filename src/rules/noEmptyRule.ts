@@ -23,7 +23,7 @@ import * as Lint from "../index";
 const ALLOW_EMPTY_CATCH = "allow-empty-catch";
 
 interface Options {
-    allowEmptyCatch: boolean;
+    readonly allowEmptyCatch: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -45,7 +45,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "block is empty";
+    public static readonly FAILURE_STRING = "block is empty";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, {

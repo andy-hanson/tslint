@@ -34,8 +34,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Unnecessary initialization to 'undefined'.";
-    public static FAILURE_STRING_PARAMETER =
+    public static readonly FAILURE_STRING = "Unnecessary initialization to 'undefined'.";
+    public static readonly FAILURE_STRING_PARAMETER =
         "Use an optional parameter instead of initializing to 'undefined'. " +
         "Also, the type declaration does not need to include '| undefined'.";
 

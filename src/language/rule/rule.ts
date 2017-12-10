@@ -29,37 +29,37 @@ export interface IRuleMetadata {
     /**
      * The kebab-case name of the rule.
      */
-    ruleName: string;
+    readonly ruleName: string;
 
     /**
      * The type of the rule - its overall purpose
      */
-    type: RuleType;
+    readonly type: RuleType;
 
     /**
      * A rule deprecation message, if applicable.
      */
-    deprecationMessage?: string;
+    readonly deprecationMessage?: string;
 
     /**
      * A short, one line description of what the rule does.
      */
-    description: string;
+    readonly description: string;
 
     /**
      * More elaborate details about the rule.
      */
-    descriptionDetails?: string;
+    readonly descriptionDetails?: string;
 
     /**
      * Whether or not the rule will provide fix suggestions.
      */
-    hasFix?: boolean;
+    readonly hasFix?: boolean;
 
     /**
      * An explanation of the available options for the rule.
      */
-    optionsDescription: string;
+    readonly optionsDescription: string;
 
     /**
      * Schema of the options the rule accepts.
@@ -67,28 +67,28 @@ export interface IRuleMetadata {
      * This field describes the options after that boolean.
      * If null, this rule has no options and is not configurable.
      */
-    options: any;
+    readonly options: any;
 
     /**
      * Examples of what a standard config for the rule might look like.
      * Using a string[] here is deprecated. Write the options as a JSON object instead.
      */
-    optionExamples?: Array<true | any[]> | string[];
+    readonly optionExamples?: Array<true | any[]> | string[];
 
     /**
      * An explanation of why the rule is useful.
      */
-    rationale?: string;
+    readonly rationale?: string;
 
     /**
      * Whether or not the rule requires type info to run.
      */
-    requiresTypeInfo?: boolean;
+    readonly requiresTypeInfo?: boolean;
 
     /**
      * Whether or not the rule use for TypeScript only. If `false`, this rule may be used with .js files.
      */
-    typescriptOnly: boolean;
+    readonly typescriptOnly: boolean;
 }
 
 export type RuleType = "functionality" | "maintainability" | "style" | "typescript";
@@ -96,15 +96,15 @@ export type RuleType = "functionality" | "maintainability" | "style" | "typescri
 export type RuleSeverity = "warning" | "error" | "off";
 
 export interface IOptions {
-    ruleArguments: any[];
-    ruleSeverity: RuleSeverity;
-    ruleName: string;
+    readonly ruleArguments: any[];
+    readonly ruleSeverity: RuleSeverity;
+    readonly ruleName: string;
     /**
      * @deprecated
      * Tslint now handles disables itself.
      * This will be empty.
      */
-    disabledIntervals: IDisabledInterval[]; // tslint:disable-line deprecation
+    readonly disabledIntervals: IDisabledInterval[]; // tslint:disable-line deprecation
 }
 
 /**
@@ -112,8 +112,8 @@ export interface IOptions {
  * These are now handled internally.
  */
 export interface IDisabledInterval {
-    startPosition: number;
-    endPosition: number;
+    readonly startPosition: number;
+    readonly endPosition: number;
 }
 
 export interface IRule {
@@ -128,19 +128,19 @@ export interface ITypedRule extends IRule {
 }
 
 export interface IRuleFailureJson {
-    endPosition: IRuleFailurePositionJson;
-    failure: string;
-    fix?: FixJson;
-    name: string;
-    ruleSeverity: string;
-    ruleName: string;
-    startPosition: IRuleFailurePositionJson;
+    readonly endPosition: IRuleFailurePositionJson;
+    readonly failure: string;
+    readonly fix?: FixJson;
+    readonly name: string;
+    readonly ruleSeverity: string;
+    readonly ruleName: string;
+    readonly startPosition: IRuleFailurePositionJson;
 }
 
 export interface IRuleFailurePositionJson {
-    character: number;
-    line: number;
-    position: number;
+    readonly character: number;
+    readonly line: number;
+    readonly position: number;
 }
 
 export function isTypedRule(rule: IRule): rule is ITypedRule {
@@ -148,9 +148,9 @@ export function isTypedRule(rule: IRule): rule is ITypedRule {
 }
 
 export interface ReplacementJson {
-    innerStart: number;
-    innerLength: number;
-    innerText: string;
+    readonly innerStart: number;
+    readonly innerLength: number;
+    readonly innerText: string;
 }
 export class Replacement {
     public static applyFixes(content: string, fixes: Fix[]): string {

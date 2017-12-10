@@ -24,8 +24,8 @@ const OPTION_ALLOW_NULL_CHECK = "allow-null-check";
 const OPTION_ALLOW_UNDEFINED_CHECK = "allow-undefined-check";
 
 interface Options {
-    allowNull: boolean;
-    allowUndefined: boolean;
+    readonly allowNull: boolean;
+    readonly allowUndefined: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -57,8 +57,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static EQ_FAILURE_STRING = "== should be ===";
-    public static NEQ_FAILURE_STRING = "!= should be !==";
+    public static readonly EQ_FAILURE_STRING = "== should be ===";
+    public static readonly NEQ_FAILURE_STRING = "!= should be !==";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, {

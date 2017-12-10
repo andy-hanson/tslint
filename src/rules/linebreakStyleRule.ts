@@ -43,8 +43,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_CRLF = `Expected linebreak to be '${OPTION_LINEBREAK_STYLE_CRLF}'`;
-    public static FAILURE_LF = `Expected linebreak to be '${OPTION_LINEBREAK_STYLE_LF}'`;
+    public static readonly FAILURE_CRLF = `Expected linebreak to be '${OPTION_LINEBREAK_STYLE_CRLF}'`;
+    public static readonly FAILURE_LF = `Expected linebreak to be '${OPTION_LINEBREAK_STYLE_LF}'`;
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, this.ruleArguments.indexOf(OPTION_LINEBREAK_STYLE_CRLF) !== -1);

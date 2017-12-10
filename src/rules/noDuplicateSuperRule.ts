@@ -34,8 +34,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_DUPLICATE = "Multiple calls to 'super()' found. It must be called only once.";
-    public static FAILURE_STRING_LOOP = "'super()' called in a loop. It must be called only once.";
+    public static readonly FAILURE_STRING_DUPLICATE = "Multiple calls to 'super()' found. It must be called only once.";
+    public static readonly FAILURE_STRING_LOOP = "'super()' called in a loop. It must be called only once.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);
@@ -185,9 +185,9 @@ const enum Kind {
 /** Represents a single 'super()' call. */
 interface Single {
     /** Node of the 'super()' call. */
-    node: ts.CallExpression;
+    readonly node: ts.CallExpression;
     /** Whether it is followed by 'break;'. */
-    break: boolean;
+    readonly break: boolean;
 }
 
 // If/else run separately, so return the branch more likely to result in eventual errors.

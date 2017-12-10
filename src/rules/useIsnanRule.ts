@@ -36,7 +36,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Found an invalid comparison for NaN: ";
+    public static readonly FAILURE_STRING = "Found an invalid comparison for NaN: ";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);

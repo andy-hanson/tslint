@@ -69,7 +69,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         typescriptOnly: false,
     };
 
-    public static KEYWORD_FAILURE = "variable name clashes with keyword/type";
+    public static readonly KEYWORD_FAILURE = "variable name clashes with keyword/type";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, parseOptions(this.ruleArguments));
@@ -77,12 +77,12 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 interface Options {
-    banKeywords: boolean;
-    checkFormat: boolean;
-    leadingUnderscore: boolean;
-    trailingUnderscore: boolean;
-    allowPascalCase: boolean;
-    allowSnakeCase: boolean;
+    readonly banKeywords: boolean;
+    readonly checkFormat: boolean;
+    readonly leadingUnderscore: boolean;
+    readonly trailingUnderscore: boolean;
+    readonly allowPascalCase: boolean;
+    readonly allowSnakeCase: boolean;
 }
 function parseOptions(ruleArguments: string[]): Options {
     const banKeywords = hasOption(OPTION_BAN_KEYWORDS);

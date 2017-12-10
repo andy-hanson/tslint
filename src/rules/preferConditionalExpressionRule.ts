@@ -23,7 +23,7 @@ import * as Lint from "../index";
 const OPTION_CHECK_ELSE_IF = "check-else-if";
 
 interface Options {
-    checkElseIf: boolean;
+    readonly checkElseIf: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {

@@ -28,10 +28,10 @@ interface IExceptionsObject {
 }
 
 interface Options {
-    space: boolean;
-    case: Case;
-    exceptions?: RegExp;
-    failureSuffix: string;
+    readonly space: boolean;
+    readonly case: Case;
+    readonly exceptions?: RegExp;
+    readonly failureSuffix: string;
 }
 
 const enum Case {
@@ -109,11 +109,11 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static LOWERCASE_FAILURE = "comment must start with lowercase letter";
-    public static UPPERCASE_FAILURE = "comment must start with uppercase letter";
-    public static LEADING_SPACE_FAILURE = "comment must start with a space";
-    public static IGNORE_WORDS_FAILURE_FACTORY = (words: string[]): string => ` or the word(s): ${words.join(", ")}`;
-    public static IGNORE_PATTERN_FAILURE_FACTORY = (pattern: string): string => ` or its start must match the regex pattern "${pattern}"`;
+    public static readonly LOWERCASE_FAILURE = "comment must start with lowercase letter";
+    public static readonly UPPERCASE_FAILURE = "comment must start with uppercase letter";
+    public static readonly LEADING_SPACE_FAILURE = "comment must start with a space";
+    public static readonly IGNORE_WORDS_FAILURE_FACTORY = (words: string[]): string => ` or the word(s): ${words.join(", ")}`;
+    public static readonly IGNORE_PATTERN_FAILURE_FACTORY = (pattern: string): string => ` or its start must match the regex pattern "${pattern}"`;
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, parseOptions(this.ruleArguments));
@@ -133,7 +133,7 @@ function parseOptions(options: Array<string | IExceptionsObject>): Options {
     };
 }
 
-function composeExceptions(option?: string | IExceptionsObject): undefined | {exceptions: RegExp; failureSuffix: string} {
+function composeExceptions(option?: string | IExceptionsObject): undefined | Pick<Options, "exceptions" | "failureSuffix"> {
     if (typeof option !== "object") {
         return undefined;
     }

@@ -48,7 +48,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         type: "typescript",
         typescriptOnly: false,
     };
-    public static FAILURE_STRING = "import with explicit side-effect";
+    public static readonly FAILURE_STRING = "import with explicit side-effect";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const patternConfig = this.ruleArguments[this.ruleArguments.length - 1] as { "ignore-module": string } | undefined;

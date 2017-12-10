@@ -26,7 +26,7 @@ export abstract class AbstractRule implements IRule {
     public static metadata: IRuleMetadata;
     protected readonly ruleArguments: any[];
     protected readonly ruleSeverity: RuleSeverity;
-    public ruleName: string;
+    public readonly ruleName: string;
 
     constructor(private readonly options: IOptions) {
         this.ruleName = options.ruleName;

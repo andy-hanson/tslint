@@ -24,8 +24,8 @@ const shownWarnings = new Set<string>();
  */
 export declare class Error {
     public name?: string;
-    public message: string;
-    public stack?: string;
+    public readonly message: string;
+    public readonly stack?: string;
     constructor(message?: string);
 }
 
@@ -33,8 +33,12 @@ export declare class Error {
  * Used to exit the program and display a friendly message without the callstack.
  */
 export class FatalError extends Error {
-    public static NAME = "FatalError";
-    constructor(public message: string, public innerError?: Error) {
+    private static readonly NAME = "FatalError";
+    constructor(
+        public readonly message: string,
+        // tslint:disable-next-line no-unused-anything (TODO: remove this?)
+        public readonly innerError?: Error,
+    ) {
         super(message);
         this.name = FatalError.NAME;
 

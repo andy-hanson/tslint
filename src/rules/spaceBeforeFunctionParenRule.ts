@@ -58,8 +58,8 @@ export class Rule extends Lint.Rules.AbstractRule {
         type: "style",
         typescriptOnly: false,
     };
-    public static INVALID_WHITESPACE_ERROR = "Spaces before function parens are disallowed";
-    public static MISSING_WHITESPACE_ERROR = "Missing whitespace before function parens";
+    public static readonly INVALID_WHITESPACE_ERROR = "Spaces before function parens are disallowed";
+    public static readonly MISSING_WHITESPACE_ERROR = "Missing whitespace before function parens";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, parseOptions(this.ruleArguments[0] as Option | Options | undefined));

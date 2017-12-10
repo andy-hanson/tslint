@@ -27,10 +27,10 @@ const OPTION_AVOID_TEMPLATE = "avoid-template";
 const OPTION_AVOID_ESCAPE = "avoid-escape";
 
 interface Options {
-    quoteMark: '"' | "'";
-    jsxQuoteMark: '"' | "'";
-    avoidEscape: boolean;
-    avoidTemplate: boolean;
+    readonly quoteMark: '"' | "'";
+    readonly jsxQuoteMark: '"' | "'";
+    readonly avoidEscape: boolean;
+    readonly avoidTemplate: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {

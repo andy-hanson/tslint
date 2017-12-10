@@ -47,9 +47,9 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static LONGHAND_PROPERTY = "Expected property shorthand in object literal ";
-    public static LONGHAND_METHOD = "Expected method shorthand in object literal ";
-    public static SHORTHAND_ASSIGNMENT = "Shorthand property assignments have been disallowed.";
+    public static readonly LONGHAND_PROPERTY = "Expected property shorthand in object literal ";
+    public static readonly LONGHAND_METHOD = "Expected method shorthand in object literal ";
+    public static readonly SHORTHAND_ASSIGNMENT = "Shorthand property assignments have been disallowed.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(

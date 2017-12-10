@@ -34,7 +34,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Expected a 'for-of' loop instead of a 'for' loop with this simple iteration";
+    public static readonly FAILURE_STRING = "Expected a 'for-of' loop instead of a 'for' loop with this simple iteration";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);
@@ -89,7 +89,7 @@ function nodeEquals(a: ts.Node, b: ts.Node, sourceFile: ts.SourceFile): boolean 
 }
 
 // returns the iterator and array of a `for` loop if the `for` loop is basic.
-function getForLoopHeaderInfo(forLoop: ts.ForStatement): { indexVariable: ts.Identifier; arrayExpr: ts.Expression } | undefined {
+function getForLoopHeaderInfo(forLoop: ts.ForStatement): { readonly indexVariable: ts.Identifier; readonly arrayExpr: ts.Expression } | undefined {
     const { initializer, condition, incrementor } = forLoop;
     if (initializer === undefined || condition === undefined || incrementor === undefined) {
         return undefined;

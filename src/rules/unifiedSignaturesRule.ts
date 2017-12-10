@@ -144,12 +144,20 @@ function walk(ctx: Lint.WalkContext<void>): void {
 }
 
 interface Failure {
-    unify: Unify;
-    only2: boolean;
+    readonly unify: Unify;
+    readonly only2: boolean;
 }
 type Unify =
-    | { kind: "single-parameter-difference"; p0: ts.ParameterDeclaration; p1: ts.ParameterDeclaration }
-    | { kind: "extra-parameter"; extraParameter: ts.ParameterDeclaration; otherSignature: ts.NodeArray<ts.ParameterDeclaration> };
+    | {
+        readonly kind: "single-parameter-difference";
+        readonly p0: ts.ParameterDeclaration;
+        readonly p1: ts.ParameterDeclaration;
+    }
+    | {
+        readonly kind: "extra-parameter";
+        readonly extraParameter: ts.ParameterDeclaration;
+        readonly otherSignature: ts.NodeArray<ts.ParameterDeclaration>;
+    };
 
 function checkOverloads<T>(
         signatures: ReadonlyArray<T>,
@@ -252,7 +260,7 @@ function signaturesDifferByOptionalOrRestParameter(sig1: ts.NodeArray<ts.Paramet
  * Given a node, if it could potentially be an overload, return its signature and key.
  * All signatures which are overloads should have equal keys.
  */
-type GetOverload<T> = (node: T) => { signature: ts.SignatureDeclaration; key: string } | undefined;
+type GetOverload<T> = (node: T) => { readonly signature: ts.SignatureDeclaration; readonly key: string } | undefined;
 
 /**
  * Returns true if typeName is the name of an *outer* type parameter.

@@ -57,8 +57,8 @@ function walk(ctx: Lint.WalkContext<void>, checker: ts.TypeChecker): void {
 }
 
 interface Compare {
-    negate: boolean;
-    expression: ts.Expression;
+    readonly negate: boolean;
+    readonly expression: ts.Expression;
 }
 
 function getBooleanComparison(node: ts.BinaryExpression, checker: ts.TypeChecker): Compare | undefined {

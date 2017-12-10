@@ -24,8 +24,8 @@ const OPTION_ALLOW_PUBLIC = "allow-public";
 const OPTION_ALLOW_PROTECTED = "allow-protected";
 
 interface Options {
-    allowPublic: boolean;
-    allowProtected: boolean;
+    readonly allowPublic: boolean;
+    readonly allowProtected: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -49,7 +49,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Class method does not use 'this'. Use a function instead.";
+    public static readonly FAILURE_STRING = "Class method does not use 'this'. Use a function instead.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithWalker(new PreferFunctionOverMethodWalker(sourceFile, this.ruleName, {

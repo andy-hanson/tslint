@@ -263,11 +263,11 @@ export function isNumeric(node: ts.Expression) {
 
 export interface TokenPosition {
     /** The start of the token including all trivia before it */
-    fullStart: number;
+    readonly fullStart: number;
     /** The start of the token */
-    tokenStart: number;
+    readonly tokenStart: number;
     /** The end of the token */
-    end: number;
+    readonly end: number;
 }
 export type ForEachTokenCallback = (fullText: string, kind: ts.SyntaxKind, pos: TokenPosition, parent: ts.Node) => void;
 export type ForEachCommentCallback = (fullText: string, kind: ts.SyntaxKind, pos: TokenPosition) => void;
@@ -456,8 +456,8 @@ export function hasCommentAfterPosition(text: string, position: number): boolean
 }
 
 export interface EqualsKind {
-    isPositive: boolean; // True for "===" and "=="
-    isStrict: boolean; // True for "===" and "!=="
+    readonly isPositive: boolean; // True for "===" and "=="
+    readonly isStrict: boolean; // True for "===" and "!=="
 }
 
 export function getEqualsKind(node: ts.BinaryOperatorToken): EqualsKind | undefined {
@@ -480,7 +480,7 @@ export function isStrictNullChecksEnabled(options: ts.CompilerOptions): boolean 
         (options.strict === true && options.strictNullChecks !== false);
 }
 
-export function isNegativeNumberLiteral(node: ts.Node): node is ts.PrefixUnaryExpression & { operand: ts.NumericLiteral } {
+export function isNegativeNumberLiteral(node: ts.Node): node is ts.PrefixUnaryExpression & { readonly operand: ts.NumericLiteral } {
     return isPrefixUnaryExpression(node) &&
         node.operator === ts.SyntaxKind.MinusToken &&
         node.operand.kind === ts.SyntaxKind.NumericLiteral;

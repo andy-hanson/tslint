@@ -33,7 +33,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_REDUNDANT_TYPE =
+    public static readonly FAILURE_STRING_REDUNDANT_TYPE =
         "Type annotation in JSDoc is redundant in TypeScript code.";
     public static FAILURE_STRING_REDUNDANT_TAG(tagName: string): string {
         return `JSDoc tag '@${tagName}' is redundant in TypeScript code.`;

@@ -24,8 +24,8 @@ import * as ts from "typescript";
 import * as Lint from "../index";
 
 interface Options {
-    dev: boolean;
-    optional: boolean;
+    readonly dev: boolean;
+    readonly optional: boolean;
 }
 
 const OPTION_DEV = "dev";
@@ -104,10 +104,10 @@ interface Dependencies extends Object {
 }
 
 interface PackageJson {
-    dependencies?: Dependencies;
-    devDependencies?: Dependencies;
-    peerDependencies?: Dependencies;
-    optionalDependencies?: Dependencies;
+    readonly dependencies?: Dependencies;
+    readonly devDependencies?: Dependencies;
+    readonly peerDependencies?: Dependencies;
+    readonly optionalDependencies?: Dependencies;
 }
 
 function getDependencies(fileName: string, options: Options): Set<string> {

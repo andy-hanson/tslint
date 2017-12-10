@@ -44,7 +44,7 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "Expression has type `void`. Put it on its own line as a statement.";
+    public static readonly FAILURE_STRING = "Expression has type `void`. Put it on its own line as a statement.";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
         const ignoreArrowFunctionShorthand = this.ruleArguments.indexOf(OPTION_IGNORE_ARROW_FUNCTION_SHORTHAND) !== -1;
@@ -53,7 +53,7 @@ export class Rule extends Lint.Rules.TypedRule {
 }
 
 interface Options {
-    ignoreArrowFunctionShorthand: boolean;
+    readonly ignoreArrowFunctionShorthand: boolean;
 }
 
 function walk(ctx: Lint.WalkContext<Options>, checker: ts.TypeChecker): void {

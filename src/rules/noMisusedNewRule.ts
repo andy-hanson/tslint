@@ -33,8 +33,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_INTERFACE = "Interfaces cannot be constructed, only classes. Did you mean `declare class`?";
-    public static FAILURE_STRING_CLASS = '`new` in a class is a method named "new". Did you mean `constructor`?';
+    public static readonly FAILURE_STRING_INTERFACE = "Interfaces cannot be constructed, only classes. Did you mean `declare class`?";
+    public static readonly FAILURE_STRING_CLASS = '`new` in a class is a method named "new". Did you mean `constructor`?';
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);
@@ -62,7 +62,7 @@ function walk(ctx: Lint.WalkContext<void>) {
     });
 }
 
-function returnTypeMatchesParent(parent: { name?: ts.Identifier }, decl: ts.SignatureDeclaration): boolean {
+function returnTypeMatchesParent(parent: { readonly name?: ts.Identifier }, decl: ts.SignatureDeclaration): boolean {
     if (parent.name === undefined || decl.type === undefined || !isTypeReferenceNode(decl.type)) {
         return false;
     }

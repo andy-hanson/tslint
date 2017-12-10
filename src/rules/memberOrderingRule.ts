@@ -362,7 +362,7 @@ function getMemberKind(member: Member): MemberKind | undefined {
     }
 }
 
-type MemberCategoryJson = { name: string; kinds: string[] } | string;
+type MemberCategoryJson = { readonly name: string; readonly kinds: string[] } | string;
 class MemberCategory {
     constructor(readonly name: string, private readonly kinds: Set<MemberKind>) {}
     public has(kind: MemberKind) { return this.kinds.has(kind); }
@@ -374,8 +374,8 @@ type Rank = number;
 type Access = "public" | "protected" | "private";
 
 interface Options {
-    order: MemberCategory[];
-    alphabetize: boolean;
+    readonly order: MemberCategory[];
+    readonly alphabetize: boolean;
 }
 
 function parseOptions(options: any[]): Options {
@@ -385,12 +385,12 @@ function parseOptions(options: any[]): Options {
         : new MemberCategory(cat.name, new Set(flatMap(cat.kinds, memberKindFromName))));
     return { order, alphabetize };
 }
-function getOptionsJson(allOptions: any[]): { order: MemberCategoryJson[]; alphabetize: boolean } {
+function getOptionsJson(allOptions: any[]): { readonly order: MemberCategoryJson[]; readonly alphabetize: boolean } {
     if (allOptions == undefined || allOptions.length === 0 || allOptions[0] == undefined) {
         throw new Error("Got empty options");
     }
 
-    const firstOption = allOptions[0] as { order: MemberCategoryJson[] | string; alphabetize?: boolean } | string;
+    const firstOption = allOptions[0] as { [OPTION_ORDER]: MemberCategoryJson[] | string; [OPTION_ALPHABETIZE]?: boolean } | string;
     if (typeof firstOption !== "object") {
         // Undocumented direct string option. Deprecate eventually.
         return { order: convertFromOldStyleOptions(allOptions), alphabetize: false }; // presume allOptions to be string[]
@@ -432,7 +432,7 @@ function convertFromOldStyleOptions(options: string[]): MemberCategoryJson[] {
         return options.indexOf(x) !== -1;
     }
 }
-interface NameAndKinds { name: string; kinds: string[]; }
+interface NameAndKinds { readonly name: string; readonly kinds: string[]; }
 function splitOldStyleOptions(categories: NameAndKinds[], filter: (name: string) => boolean, a: string, b: string): NameAndKinds[] {
     const newCategories: NameAndKinds[]  = [];
     for (const cat of categories) {

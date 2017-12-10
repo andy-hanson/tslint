@@ -24,9 +24,9 @@ type OptionValue = "always" | "never" | "ignore";
 type OptionName = "arrays" | "exports" | "functions" | "imports" | "objects" | "typeLiterals";
 type CustomOptionValue = Record<OptionName, OptionValue>;
 interface Options {
-    multiline: CustomOptionValue;
-    singleline: CustomOptionValue;
-    specCompliant: boolean;
+    readonly multiline: CustomOptionValue;
+    readonly singleline: CustomOptionValue;
+    readonly specCompliant: boolean;
 }
 
 const defaultOptions: CustomOptionValue = fillOptions("ignore" as "ignore");
@@ -42,12 +42,17 @@ function fillOptions<T>(value: T): Record<OptionName, T> {
     };
 }
 
-type OptionsJson = Partial<Record<"multiline" | "singleline", Partial<CustomOptionValue> | OptionValue> & {esSpecCompliant: boolean}>;
+type OptionsJsonValue = Partial<CustomOptionValue> | OptionValue;
+interface OptionsJson {
+    readonly multiline: OptionsJsonValue;
+    readonly singleline: OptionsJsonValue;
+    readonly esSpecCompliant: boolean;
+};
 function normalizeOptions(options: OptionsJson): Options {
     return { multiline: normalize(options.multiline), singleline: normalize(options.singleline), specCompliant: !!options.esSpecCompliant};
 
 }
-function normalize(value: OptionsJson["multiline"]): CustomOptionValue {
+function normalize(value: OptionsJsonValue): CustomOptionValue {
     return typeof value === "string" ? fillOptions(value) : { ...defaultOptions, ...value };
 }
 
@@ -126,9 +131,9 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_NEVER = "Unnecessary trailing comma";
-    public static FAILURE_STRING_FORBIDDEN = "Forbidden trailing comma";
-    public static FAILURE_STRING_ALWAYS = "Missing trailing comma";
+    public static readonly FAILURE_STRING_NEVER = "Unnecessary trailing comma";
+    public static readonly FAILURE_STRING_FORBIDDEN = "Forbidden trailing comma";
+    public static readonly FAILURE_STRING_ALWAYS = "Missing trailing comma";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const options = normalizeOptions(this.ruleArguments[0] as OptionsJson);

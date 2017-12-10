@@ -26,7 +26,7 @@ const OPTION_ONLY_INLINE_LAMBDAS = "only-inline-lambdas";
 type ParameterOrPropertyDeclaration = ts.ParameterDeclaration | ts.PropertyDeclaration;
 
 interface Options {
-    onlyInlineLambdas: boolean;
+    readonly onlyInlineLambdas: boolean;
 }
 
 export class Rule extends Lint.Rules.TypedRule {

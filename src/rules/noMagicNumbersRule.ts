@@ -45,9 +45,9 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "'magic numbers' are not allowed";
+    public static readonly FAILURE_STRING = "'magic numbers' are not allowed";
 
-    public static ALLOWED_NODES = new Set<ts.SyntaxKind>([
+    public static readonly ALLOWED_NODES = new Set<ts.SyntaxKind>([
         ts.SyntaxKind.ExportAssignment,
         ts.SyntaxKind.FirstAssignment,
         ts.SyntaxKind.LastAssignment,
@@ -60,7 +60,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         ts.SyntaxKind.Parameter,
     ]);
 
-    public static DEFAULT_ALLOWED = [ -1, 0, 1 ];
+    private static readonly DEFAULT_ALLOWED = [ -1, 0, 1 ];
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const allowedNumbers = this.ruleArguments.length > 0 ? this.ruleArguments : Rule.DEFAULT_ALLOWED;
@@ -75,11 +75,11 @@ class NoMagicNumbersWalker extends Lint.AbstractWalker<Set<string>> {
                 return node.arguments.length === 0 ? undefined : cb(node.arguments[0]);
             }
 
-            if (node.kind === ts.SyntaxKind.NumericLiteral) {
-                return this.checkNumericLiteral(node, (node as ts.NumericLiteral).text);
+            if (ts.isNumericLiteral(node)) {
+                return this.checkNumericLiteral(node, node.text);
             }
             if (isNegativeNumberLiteral(node)) {
-                return this.checkNumericLiteral(node, `-${(node.operand as ts.NumericLiteral).text}`);
+                return this.checkNumericLiteral(node, `-${node.operand.text}`);
             }
             return ts.forEachChild(node, cb);
         };

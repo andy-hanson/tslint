@@ -38,7 +38,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING =
+    public static readonly FAILURE_STRING =
         `'typeof' expression must be compared to one of: ${Array.from(LEGAL_TYPEOF_RESULTS).map((x) => `"${x}"`).join(", ")}`;
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {

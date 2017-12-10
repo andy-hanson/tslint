@@ -34,9 +34,9 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_VALUE_RETURN =
+    public static readonly FAILURE_STRING_VALUE_RETURN =
         "Value-returning function should use `return undefined;`, not just `return;`.";
-    public static FAILURE_STRING_VOID_RETURN =
+    public static readonly FAILURE_STRING_VOID_RETURN =
         "`void` function should use `return;`, not `return undefined;`.";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {

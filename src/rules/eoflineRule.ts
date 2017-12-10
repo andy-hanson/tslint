@@ -34,7 +34,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         typescriptOnly: false,
     };
     /* tslint:enable:object-literal-sort-keys */
-    public static FAILURE_STRING = "file should end with a newline";
+    private static readonly FAILURE_STRING = "file should end with a newline";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const length = sourceFile.text.length;

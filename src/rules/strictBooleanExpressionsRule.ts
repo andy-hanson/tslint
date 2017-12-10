@@ -94,13 +94,13 @@ export class Rule extends Lint.Rules.TypedRule {
 }
 
 interface Options {
-    strictNullChecks: boolean;
-    allowNullUnion: boolean;
-    allowUndefinedUnion: boolean;
-    allowString: boolean;
-    allowNumber: boolean;
-    allowMix: boolean;
-    allowBooleanOrUndefined: boolean;
+    readonly strictNullChecks: boolean;
+    readonly allowNullUnion: boolean;
+    readonly allowUndefinedUnion: boolean;
+    readonly allowString: boolean;
+    readonly allowNumber: boolean;
+    readonly allowMix: boolean;
+    readonly allowBooleanOrUndefined: boolean;
 }
 
 function parseOptions(ruleArguments: string[], strictNullChecks: boolean): Options {
@@ -465,6 +465,6 @@ function showTypeFailure(ty: TypeFailure, unionType: boolean, strictNullChecks: 
 declare module "typescript" {
     // No other way to distinguish boolean literal true from boolean literal false
     export interface IntrinsicType extends ts.Type {
-        intrinsicName: string;
+        readonly intrinsicName: string;
     }
 }

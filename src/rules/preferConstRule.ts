@@ -24,7 +24,7 @@ const OPTION_DESTRUCTURING_ALL = "all";
 const OPTION_DESTRUCTURING_ANY = "any";
 
 interface Options {
-    destructuringAll: boolean;
+    readonly destructuringAll: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -65,7 +65,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const options: Options = {
             destructuringAll: this.ruleArguments.length !== 0 &&
-                (this.ruleArguments[0] as {destructuring?: string}).destructuring === OPTION_DESTRUCTURING_ALL,
+                (this.ruleArguments[0] as { readonly destructuring?: string }).destructuring === OPTION_DESTRUCTURING_ALL,
         };
         const preferConstWalker = new PreferConstWalker(sourceFile, this.ruleName, options);
         return this.applyWithWalker(preferConstWalker);
@@ -73,9 +73,9 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 class Scope {
-    public functionScope: Scope;
-    public variables = new Map<string, VariableInfo>();
-    public reassigned = new Set<string>();
+    public readonly functionScope: Scope;
+    public readonly variables = new Map<string, VariableInfo>();
+    public readonly reassigned = new Set<string>();
     constructor(functionScope?: Scope) {
         // if no functionScope is provided we are in the process of creating a new function scope, which for consistency links to itself
         this.functionScope = functionScope === undefined ? this : functionScope;
@@ -94,24 +94,24 @@ class Scope {
 }
 
 interface VariableInfo {
-    identifier: ts.Identifier;
+    readonly identifier: ts.Identifier; //should be readonly, why don't we catch this?
     reassigned: boolean;
-    declarationInfo: DeclarationInfo;
-    destructuringInfo: DestructuringInfo | undefined;
+    readonly declarationInfo: DeclarationInfo;
+    readonly destructuringInfo: DestructuringInfo | undefined;
 }
 
 interface DeclarationListInfo {
-    allInitialized: boolean;
-    canBeConst: true;
-    declarationList: ts.VariableDeclarationList;
-    isBlockScoped: boolean;
-    isForLoop: boolean;
+    readonly allInitialized: boolean;
+    readonly canBeConst: true;
+    readonly declarationList: ts.VariableDeclarationList;
+    readonly isBlockScoped: boolean;
+    readonly isForLoop: boolean;
     reassignedSiblings: boolean;
 }
 
 interface UnchangeableDeclarationInfo {
-    canBeConst: false;
-    isBlockScoped: boolean;
+    readonly canBeConst: false;
+    readonly isBlockScoped: boolean;
 }
 
 type DeclarationInfo = DeclarationListInfo | UnchangeableDeclarationInfo;
@@ -191,7 +191,7 @@ class PreferConstWalker extends Lint.AbstractWalker<Options> {
                 this.handleExpression(node.left);
             }
 
-            if (boundary !== utils.ScopeBoundary.None) {
+            if (boundary !== 0) {//utils.ScopeBoundary.None) {
                 ts.forEachChild(node, cb);
                 this.onScopeEnd(savedScope);
                 this.scope = savedScope;

@@ -34,8 +34,8 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static INVALID_TYPES_ERROR = "Operands of '+' operation must either be both strings or both numbers";
-    public static SUGGEST_TEMPLATE_LITERALS = ", consider using template literals";
+    public static readonly INVALID_TYPES_ERROR = "Operands of '+' operation must either be both strings or both numbers";
+    public static readonly SUGGEST_TEMPLATE_LITERALS = ", consider using template literals";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, undefined, program.getTypeChecker());
@@ -69,7 +69,7 @@ function getBaseTypeOfLiteralType(type: ts.Type): "string" | "number" | "invalid
         return allSame(types) ? types[0] : "invalid";
     } else if (isTypeFlagSet(type, ts.TypeFlags.EnumLiteral)) {
         // Compatibility for TypeScript pre-2.4, which used EnumLiteralType instead of LiteralType
-        getBaseTypeOfLiteralType((type as any as { baseType: ts.LiteralType }).baseType);
+        getBaseTypeOfLiteralType((type as any as { readonly baseType: ts.LiteralType }).baseType);
     }
     return "invalid";
 }

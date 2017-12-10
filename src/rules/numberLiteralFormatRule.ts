@@ -34,11 +34,11 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING_LEADING_0 = "Number literal should not have a leading '0'.";
-    public static FAILURE_STRING_TRAILING_0 = "Number literal should not have a trailing '0'.";
-    public static FAILURE_STRING_TRAILING_DECIMAL = "Number literal should not end in '.'.";
-    public static FAILURE_STRING_LEADING_DECIMAL = "Number literal should begin with '0.' and not just '.'.";
-    public static FAILURE_STRING_NOT_UPPERCASE = "Hexadecimal number literal should be uppercase.";
+    public static readonly FAILURE_STRING_LEADING_0 = "Number literal should not have a leading '0'.";
+    public static readonly FAILURE_STRING_TRAILING_0 = "Number literal should not have a trailing '0'.";
+    public static readonly FAILURE_STRING_TRAILING_DECIMAL = "Number literal should not end in '.'.";
+    public static readonly FAILURE_STRING_LEADING_DECIMAL = "Number literal should begin with '0.' and not just '.'.";
+    public static readonly FAILURE_STRING_NOT_UPPERCASE = "Hexadecimal number literal should be uppercase.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);

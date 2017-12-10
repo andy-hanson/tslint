@@ -43,12 +43,14 @@ import { arrayify, dedent, flatMap, mapDefined } from "./utils";
  * Linter that can lint multiple files in consecutive runs.
  */
 class Linter {
+    // tslint:disable no-unused-anything
     public static VERSION = "5.8.0";
 
     public static findConfiguration = findConfiguration;
-    public static findConfigurationPath = findConfigurationPath;
-    public static getRulesDirectories = getRulesDirectories;
-    public static loadConfigurationFromPath = loadConfigurationFromPath;
+    public static readonly findConfigurationPath = findConfigurationPath;
+    public static readonly getRulesDirectories = getRulesDirectories;
+    public static readonly loadConfigurationFromPath = loadConfigurationFromPath;
+    // tslint:enable no-unused-anything
 
     private failures: RuleFailure[] = [];
     private fixes: RuleFailure[] = [];

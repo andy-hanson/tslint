@@ -47,7 +47,7 @@ export class Rule extends Lint.Rules.TypedRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "for-in loops over arrays are forbidden. Use for-of or array.forEach instead.";
+    public static readonly FAILURE_STRING = "for-in loops over arrays are forbidden. Use for-of or array.forEach instead.";
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, undefined, program.getTypeChecker());

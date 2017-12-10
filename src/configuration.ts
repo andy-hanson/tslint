@@ -30,38 +30,38 @@ export interface IConfigurationFile {
      * The severity that is applied to rules in _this_ config with `severity === "default"`.
      * Not inherited.
      */
-    defaultSeverity?: RuleSeverity;
+    readonly defaultSeverity?: RuleSeverity;
 
     /**
      * An array of config files whose rules are inherited by this config file.
      */
-    extends: string[];
+    readonly extends: string[];
 
     /**
      * Rules that are used to lint to JavaScript files.
      */
-    jsRules: Map<string, Partial<IOptions>>;
+    readonly jsRules: Map<string, Partial<IOptions>>;
 
     /**
      * A subset of the CLI options.
      */
-    linterOptions?: Partial<{
-        exclude: string[];
+    readonly linterOptions?: Partial<{
+        readonly exclude: string[];
     }>;
 
     /**
      * Directories containing custom rules. Resolved using node module semantics.
      */
-    rulesDirectory: string[];
+    readonly rulesDirectory: string[];
 
     /**
      * Rules that are used to lint TypeScript files.
      */
-    rules: Map<string, Partial<IOptions>>;
+    readonly rules: Map<string, Partial<IOptions>>;
 }
 
 export interface IConfigurationLoadResult {
-    path?: string;
+    readonly path?: string;
     results?: IConfigurationFile;
 }
 
@@ -455,19 +455,19 @@ function parseRuleOptions(ruleConfigValue: RawRuleConfig, rawDefaultRuleSeverity
 }
 
 export interface RawConfigFile {
-    extends?: string | string[];
-    linterOptions?: IConfigurationFile["linterOptions"];
-    rulesDirectory?: string | string[];
-    defaultSeverity?: string;
-    rules?: RawRulesConfig;
-    jsRules?: RawRulesConfig;
+    readonly extends?: string | string[];
+    readonly linterOptions?: IConfigurationFile["linterOptions"];
+    readonly rulesDirectory?: string | string[];
+    readonly defaultSeverity?: string;
+    readonly rules?: RawRulesConfig;
+    readonly jsRules?: RawRulesConfig;
 }
 export interface RawRulesConfig {
     [key: string]: RawRuleConfig;
 }
 export type RawRuleConfig = null | undefined | boolean | any[] | {
-    severity?: RuleSeverity | "warn" | "none" | "default";
-    options?: any;
+    readonly severity?: RuleSeverity | "warn" | "none" | "default";
+    readonly options?: any;
 };
 
 /**

@@ -27,11 +27,11 @@ const OPTION_FINALLY = "check-finally";
 const OPTION_WHITESPACE = "check-whitespace";
 
 interface Options {
-    brace: boolean;
-    catch: boolean;
-    else: boolean;
-    finally: boolean;
-    whitespace: boolean;
+    readonly brace: boolean;
+    readonly catch: boolean;
+    readonly else: boolean;
+    readonly finally: boolean;
+    readonly whitespace: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -63,7 +63,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static WHITESPACE_FAILURE_STRING = "missing whitespace";
+    public static readonly WHITESPACE_FAILURE_STRING = "missing whitespace";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithWalker(new OneLineWalker(sourceFile, this.ruleName, {

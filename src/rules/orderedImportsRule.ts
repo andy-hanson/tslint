@@ -112,10 +112,10 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static IMPORT_SOURCES_NOT_GROUPED =
+    public static readonly IMPORT_SOURCES_NOT_GROUPED =
         "Import sources of different groups must be sorted by: libraries, parent directories, current directory.";
-    public static IMPORT_SOURCES_UNORDERED = "Import sources within a group must be alphabetized.";
-    public static NAMED_IMPORTS_UNORDERED = "Named imports must be alphabetized.";
+    public static readonly IMPORT_SOURCES_UNORDERED = "Import sources within a group must be alphabetized.";
+    public static readonly NAMED_IMPORTS_UNORDERED = "Named imports must be alphabetized.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithWalker(new Walker(sourceFile, this.ruleName, parseOptions(this.ruleArguments)));
@@ -151,14 +151,14 @@ enum ImportType {
 }
 
 interface Options {
-    groupedImports: boolean;
-    importSourcesOrderTransform: Transform;
-    moduleSourcePath: Transform;
-    namedImportsOrderTransform: Transform;
+    readonly groupedImports: boolean;
+    readonly importSourcesOrderTransform: Transform;
+    readonly moduleSourcePath: Transform;
+    readonly namedImportsOrderTransform: Transform;
 }
 
 interface JsonOptions {
-    "grouped-imports"?: boolean;
+    "grouped-imports"?: boolean; //should catch this
     "import-sources-order"?: string;
     "named-imports-order"?: string;
     "module-source-path"?: string;
@@ -377,12 +377,12 @@ class Walker extends Lint.AbstractWalker<Options> {
 }
 
 interface ImportDeclaration {
-    node: ts.ImportDeclaration | ts.ImportEqualsDeclaration;
-    nodeEndOffset: number;      // end position of node within source file
-    nodeStartOffset: number;    // start position of node within source file
+    readonly node: ts.ImportDeclaration | ts.ImportEqualsDeclaration;
+    readonly nodeEndOffset: number;      // end position of node within source file
+    readonly nodeStartOffset: number;    // start position of node within source file
     text: string;               // initialized with original import text; modified if the named imports are reordered
-    sourcePath: string;
-    type: ImportType;
+    readonly sourcePath: string;
+    readonly type: ImportType;
 }
 
 class ImportsBlock {

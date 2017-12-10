@@ -27,10 +27,10 @@ const OPTION_IGNORE_TEMPLATE_STRINGS = "ignore-template-strings";
 const OPTION_IGNORE_BLANK_LINES = "ignore-blank-lines";
 
 interface Options {
-    ignoreTemplates: boolean;
-    ignoreComments: boolean;
-    ignoreJsDoc: boolean;
-    ignoreBlankLines: boolean;
+    readonly ignoreTemplates: boolean;
+    readonly ignoreComments: boolean;
+    readonly ignoreJsDoc: boolean;
+    readonly ignoreBlankLines: boolean;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {
@@ -64,7 +64,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public static FAILURE_STRING = "trailing whitespace";
+    public static readonly FAILURE_STRING = "trailing whitespace";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const ignoreComments = this.ruleArguments.indexOf(OPTION_IGNORE_COMMENTS) !== -1;

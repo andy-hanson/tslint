@@ -20,21 +20,21 @@ import * as ts from "typescript";
 import * as Lint from "../index";
 
 interface FunctionBan {
-    name: string;
-    message?: string;
+    readonly name: string;
+    readonly message?: string;
 }
 interface MethodBan extends FunctionBan {
-    object: string[];
+    readonly object: string[];
 }
 
 interface Options {
-    functions: FunctionBan[];
-    methods: MethodBan[];
+    readonly functions: FunctionBan[];
+    readonly methods: MethodBan[];
 }
 
 interface OptionsInput {
-    name: string | string[];
-    message?: string;
+    readonly name: string | string[];
+    readonly message?: string;
 }
 
 export class Rule extends Lint.Rules.AbstractRule {

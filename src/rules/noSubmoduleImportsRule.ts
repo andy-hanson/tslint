@@ -41,7 +41,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         typescriptOnly: false,
     };
 
-    public static FAILURE_STRING = "Submodule import paths from this package are disallowed; import from the root instead";
+    public static readonly FAILURE_STRING = "Submodule import paths from this package are disallowed; import from the root instead";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, this.ruleArguments);

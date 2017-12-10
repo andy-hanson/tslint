@@ -29,7 +29,7 @@ import {
     parseLine,
     printLine,
 } from "./lines";
-import { errorComparator, LintError, lintSyntaxError } from "./lintError";
+import { errorComparator, LintError, lintSyntaxError, PositionInFile } from "./lintError";
 
 let scanner: ts.Scanner | undefined;
 
@@ -127,7 +127,7 @@ export function parseErrorsFromMarkup(text: string): LintError[] {
     const errorLinesForCodeLines = createCodeLineNoToErrorsMap(lines);
 
     const lintErrors: LintError[] = [];
-    function addError(errorLine: EndErrorLine, errorStartPos: { line: number; col: number }, lineNo: number) {
+    function addError(errorLine: EndErrorLine, errorStartPos: PositionInFile, lineNo: number) {
         lintErrors.push({
             startPos: errorStartPos,
             endPos: { line: lineNo, col: errorLine.endCol },

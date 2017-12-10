@@ -130,6 +130,11 @@ function walk(ctx: Lint.WalkContext<void>, checker: ts.TypeChecker): void {
     }
 }
 
-function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
+//mv
+export function skipAlias(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol {
+    const alias = tryGetAliasedSymbol(symbol, checker);
+    return alias === undefined ? symbol : alias;
+}
+export function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
     return utils.isSymbolFlagSet(symbol, ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : undefined;
 }
