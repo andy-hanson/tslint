@@ -158,17 +158,12 @@ class Walker extends Lint.AbstractWalker<Options> {
             //todo: map and set too
             //todo: unions too
             //todo: would like a type checker api...
-            const typeNode = ts.isVariableDeclaration(node)
-                //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
-                || ts.isParameter(node) && node.dotDotDotToken === undefined
-                || ts.isPropertyDeclaration(node)
-                ? node.type
-                : undefined;
-            if (typeNode) {
-                if (typeNode.kind === ts.SyntaxKind.ArrayType) {//todo: also array<>
-                    if (!this.info.symbolToTypeIsMutated.has(sym)) {
-                        this.addFailureAtNode(typeNode, "Could be readonly bro");
-                    }
+            //const actualType = this.checker.getTypeAtLocation(node.name);
+            //if (this.checker.typeToString(actualType).endsWith("[]")) {
+            const typeNode = getTypeNode(node);
+            if (typeNode && containsMutableArrayType(typeNode)) {//todo: also array<>
+                if (!this.info.symbolToTypeIsMutated.has(sym)) {
+                    this.addFailureAtNode(node.name, "Could be readonly bro");
                 }
             }
         }
@@ -206,10 +201,29 @@ class Walker extends Lint.AbstractWalker<Options> {
     }
 }
 
+function containsMutableArrayType(node: ts.TypeNode): boolean {
+    return ts.isUnionTypeNode(node) ? node.types.some(containsMutableArrayType) : node.kind === ts.SyntaxKind.ArrayType;
+}
+
+//test: that we handle unions
+function getTypeNode(node: Tested): ts.TypeNode | undefined {
+    return ts.isVariableDeclaration(node)
+        //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
+        || ts.isParameter(node) && node.dotDotDotToken === undefined
+        || ts.isPropertyDeclaration(node)
+        ? node.type
+        //TODO: also getter, setter
+        : ts.isMethodDeclaration(node) || ts.isFunctionDeclaration(node) ? node.type : undefined;
+}
+
 //name
-type Tested = (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration) & { readonly name: ts.Identifier }; //tslint:disable-line no-unused-anything
+type Tested = (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration | ts.FunctionDeclaration) & { readonly name: ts.Identifier }; //tslint:disable-line no-unused-anything
 function isTested(node: ts.Node): node is Tested {
-    return (isElementOfClassOrInterface(node) || ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isIdentifier(node.name);
+    return (isElementOfClassOrInterface(node)
+        || ts.isVariableDeclaration(node)
+        || ts.isParameter(node)
+        || ts.isFunctionDeclaration(node))
+        && node.name !== undefined && ts.isIdentifier(node.name);
 }
 
 function isTestedElement(node: Tested): node is ElementOfClassOrInterface {
@@ -284,8 +298,19 @@ class Foo {
     private readonly enumMembers = new Map<ts.Symbol, EnumAccessFlags>();
     private readonly interfaceIsDirectlyCreated = new Set<ts.Symbol>();
     private readonly symbolToTypeIsMutated = new Set<ts.Symbol>();
+    //tracks when a property or return is assigned to a local variable.
+    private readonly localVariableAliases = new Map<ts.Symbol, ts.Symbol[]>();
 
     finish(): Info {
+        //todo: repeat until no changes
+        this.localVariableAliases.forEach((aliases, sym) => {
+            for (const alias of aliases) {
+                if (this.symbolToTypeIsMutated.has(alias)) {
+                    this.symbolToTypeIsMutated.add(sym);
+                }
+            }
+        });
+
         return {
             properties: this.properties,
             enumMembers: this.enumMembers,
@@ -324,18 +349,18 @@ class Foo {
         cb(file, undefined);
     }
 
-    private trackSymbolUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {
-        if (isSymbolFlagSet(sym, ts.SymbolFlags.EnumMember)) {
-            this.trackEnumMemberUse(node, sym);
+    private trackSymbolUse(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
+            this.trackEnumMemberUse(node, symbol);
         } else {
-            this.fff(node, sym, currentClass);
+            this.fff(node, symbol, currentClass);
         }
     }
 
-    private trackEnumMemberUse(node: ts.Identifier, sym: ts.Symbol) {
-        const prevFlags = this.enumMembers.get(sym);
+    private trackEnumMemberUse(node: ts.Identifier, symbol: ts.Symbol) {
+        const prevFlags = this.enumMembers.get(symbol);
         const flags = accessFlagsForEnumAccess(node);
-        this.enumMembers.set(sym, flags | (prevFlags === undefined ? EnumAccessFlags.None : prevFlags));
+        this.enumMembers.set(symbol, flags | (prevFlags === undefined ? EnumAccessFlags.None : prevFlags));
     }
 
     private fff(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
@@ -356,67 +381,94 @@ class Foo {
         else {
             this.xxx(node, sym, currentClass);
         }
-        /*
-        else {
-            for (const s of this.checker.getRootSymbols(sym)) {
-                const v = s.valueDeclaration; //name
-                if (v !== undefined && isElementOfClass(v)) {
-                    if (v.parent !== currentClass) {
-                        this.classElementsUsedPublicly.add(v);
-                    }
-                }
-            }
-        }
-        */
     }
 
-    private xxx(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
-        for (const s of this.checker.getRootSymbols(sym)) {
+    private xxx(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
+        for (const s of this.checker.getRootSymbols(symbol)) {
             this.trackUse(node, s, currentClass);
         }
     }
 
-    private trackUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {//name
-        if (sym.declarations === undefined) {
+    private trackUse(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {//name
+        if (symbol.declarations === undefined) {
             return;
         }
 
-        const info = createIfNotSet(this.properties, sym, () => new SymbolInfo()); //if not a property -- fine, whatever
-        const newFlags = accessFlags(node, sym);
-        if (sym.declarations.some(d => d.parent === currentClass)) {
+        const info = createIfNotSet(this.properties, symbol, () => new SymbolInfo()); //if not a property -- fine, whatever
+        const newFlags = accessFlags(node, symbol);
+        if (symbol.declarations.some(d => d.parent === currentClass)) {
             info.private = info.private | newFlags;
         } else {
             info.public = info.public | newFlags;
         }
 
         //track use of the type -- if this is array or map or set, see if we mutate it
-        if (isPossiblyMutableUse(node, this.checker)) {
-            this.symbolToTypeIsMutated.add(sym);
+        const x = isPossiblyMutated(node, symbol, this.checker, aliasId => {
+            const aliasSym = this.checker.getSymbolAtLocation(aliasId)!;
+            assert(!!aliasSym);
+            multiMapAdd(this.localVariableAliases, symbol, aliasSym);
+        }); //name
+        if (x) {
+            this.symbolToTypeIsMutated.add(symbol);
         }
     }
 }
 
-function isPossiblyMutableUse(node: ts.Expression, checker: ts.TypeChecker): boolean {
-    //TODO: `x[0]` is immutable but `x[0] = 1` isn't
+function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+    const values = map.get(key);
+    if (values === undefined) {
+        map.set(key, [value]);
+    } else {
+        values.push(value);
+    }
+}
 
+function isPossiblyMutated(
+    node: ts.Identifier,
+    symbol: ts.Symbol,
+    checker: ts.TypeChecker,
+    addAlias: (id: ts.Identifier) => void
+): boolean {
+    const x = isSymbolFlagSet(symbol, ts.SymbolFlags.Method | ts.SymbolFlags.Function) ? getCall(node) : node;
+    return x !== undefined && isPossiblyMutableUse(x, checker, addAlias);
+}
+
+function getCall(node: ts.Identifier) {
     const parent = node.parent!;
+    const x = ts.isPropertyAccessExpression(parent) && parent.name === node ? parent.parent! : parent;
+    return ts.isCallExpression(x) ? x : undefined;
+}
+
+function isPossiblyMutableUse(node: ts.Expression, checker: ts.TypeChecker, addAlias: (id: ts.Identifier) => void): boolean {
+    //TODO: `x[0]` is immutable but `x[0] = 1` isn't
+    const parent = node.parent!;
+    if (isTested(parent) && parent.name === node) {
+        return false;
+    }
     if (ts.isPropertyAccessExpression(parent)) {
         if (parent.name === node) {//prefer conditional
             //x.y.z.array
-            return isPossiblyMutableUse(parent, checker);
+            return isPossiblyMutableUse(parent, checker, addAlias);
         } else {
             assert(parent.expression === node);
             //Check that it's not a mutating method
             return isMutatingMethodName(parent.name.text);
         }
     }
-    //todo: more like this
-    if (ts.isVariableDeclaration(parent) && parent.name === node) {
+    if (ts.isExpressionStatement(parent)) {
         return false;
     }
-    if (ts.isParameter(parent) && parent.name === node) {
+    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+        assert(parent.initializer === node);
+        addAlias(parent.name);
+        return false; //for now -- alias may be mutated
+    }
+
+    const contextualType = checker.getContextualType(node);
+    if (contextualType && checker.typeToString(contextualType).startsWith("Readonly")) {
         return false;
     }
+
     return true; //todo: do better... If we pass it to a fn taking readonlyarray it's fine...
 }
 
@@ -450,12 +502,12 @@ function isElementOfClassOrInterface(node: ts.Node): node is ElementOfClassOrInt
 }
 
 //!
-export function showFlags(sym: ts.Symbol) {
+export function showFlags(symbol: ts.Symbol) {
     const all: string[] = [];
     for (const name in ts.SymbolFlags) {
         const val = ts.SymbolFlags[name];
         if (typeof val !== "number") continue;
-        if (isSymbolFlagSet(sym, val)) {
+        if (isSymbolFlagSet(symbol, val)) {
             all.push(name);
         }
     }
@@ -638,9 +690,9 @@ function isAssignmentOperator(token: ts.SyntaxKind): boolean {
 }
 
 
-function skipTransient(sym: ts.Symbol): ts.Symbol {
+function skipTransient(symbol: ts.Symbol): ts.Symbol {
     //todo: we shouldn't get these coming out of `getSymbolAtLocation`...
-    return isSymbolFlagSet(sym, ts.SymbolFlags.Transient) ? (sym as any).target || sym : sym;
+    return isSymbolFlagSet(symbol, ts.SymbolFlags.Transient) ? (symbol as any).target || symbol : symbol;
 }
 function skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol { //name
     const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, checker);

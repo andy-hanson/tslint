@@ -186,7 +186,7 @@ const options: Option[] = [
     },
 ];
 
-const builtinOptions: Option[] = [
+const builtinOptions: ReadonlyArray<Option> = [
     {
         short: "v",
         name: "version",

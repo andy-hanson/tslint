@@ -531,7 +531,7 @@ function getSortedImportDeclarationsAsText(importDeclarations: ReadonlyArray<Imp
     return sortedDeclarations.map((x) => x.text).join("");
 }
 
-function sortByKey<T>(xs: ReadonlyArray<T>, getSortKey: (x: T) => string): T[] {
+function sortByKey<T>(xs: ReadonlyArray<T>, getSortKey: (x: T) => string): ReadonlyArray<T> {
     return xs.slice().sort((a, b) => compare(getSortKey(a), getSortKey(b)));
 }
 

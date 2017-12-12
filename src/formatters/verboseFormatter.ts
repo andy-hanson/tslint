@@ -35,7 +35,7 @@ export class Formatter extends AbstractFormatter {
         return `${this.mapToMessages(failures).join("\n")}\n`;
     }
 
-    private mapToMessages(failures: ReadonlyArray<RuleFailure>): string[] {
+    private mapToMessages(failures: ReadonlyArray<RuleFailure>): ReadonlyArray<string> {
         return failures.map((failure: RuleFailure) => {
             const fileName = failure.getFileName();
             const failureString = failure.getFailure();

@@ -60,10 +60,10 @@ export class Rule extends Lint.Rules.AbstractRule {
         ts.SyntaxKind.Parameter,
     ]);
 
-    private static readonly DEFAULT_ALLOWED = [ -1, 0, 1 ];
+    private static readonly DEFAULT_ALLOWED: ReadonlyArray<number> = [ -1, 0, 1 ];
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
-        const allowedNumbers = this.ruleArguments.length > 0 ? this.ruleArguments : Rule.DEFAULT_ALLOWED;
+        const allowedNumbers = this.ruleArguments.length > 0 ? this.ruleArguments as ReadonlyArray<number> : Rule.DEFAULT_ALLOWED;
         return this.applyWithWalker(new NoMagicNumbersWalker(sourceFile, this.ruleName, new Set(allowedNumbers.map(String))));
     }
 }

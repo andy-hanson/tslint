@@ -46,7 +46,7 @@ export class Formatter extends AbstractFormatter {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public format(failures: RuleFailure[]): string {
+    public format(failures: ReadonlyArray<RuleFailure>): string {
         let output: string[] = ["TAP version 13"];
 
         if (failures.length === 0) {
@@ -60,7 +60,7 @@ export class Formatter extends AbstractFormatter {
         return `${output.join("\n")}\n`;
     }
 
-    private mapToMessages(failures: ReadonlyArray<RuleFailure>): string[] {
+    private mapToMessages(failures: ReadonlyArray<RuleFailure>): ReadonlyArray<string> {
         return failures.map((failure: RuleFailure, i: number) => {
             const fileName = failure.getFileName();
             const failureString = failure.getFailure();

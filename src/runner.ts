@@ -221,7 +221,7 @@ function filterFiles(files: ReadonlyArray<string>, patterns: ReadonlyArray<strin
     return files.filter((file) => include === matcher.some((pattern) => pattern.match(file)));
 }
 
-function resolveGlobs(files: string[], ignore: string[], outputAbsolutePaths: boolean | undefined, logger: Logger): string[] {
+function resolveGlobs(files: ReadonlyArray<string>, ignore: ReadonlyArray<string>, outputAbsolutePaths: boolean | undefined, logger: Logger): ReadonlyArray<string> {
     const results = flatMap(
         files,
         (file) => glob.sync(trimSingleQuotes(file), { ignore, nodir: true }),

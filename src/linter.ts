@@ -95,7 +95,7 @@ class Linter {
      * Returns a list of source file names from a TypeScript program. This includes all referenced
      * files and excludes declaration (".d.ts") files.
      */
-    public static getFileNames(program: ts.Program): string[] {
+    public static getFileNames(program: ts.Program): ReadonlyArray<string> {
         return mapDefined(
             program.getSourceFiles(),
             (file) =>
@@ -228,7 +228,7 @@ class Linter {
         }
     }
 
-    private applyRule(rule: IRule, sourceFile: ts.SourceFile): RuleFailure[] {
+    private applyRule(rule: IRule, sourceFile: ts.SourceFile): ReadonlyArray<RuleFailure> {
         try {
             if (this.program !== undefined && isTypedRule(rule)) {
                 return rule.applyWithProgram(sourceFile, this.program);
@@ -245,7 +245,7 @@ class Linter {
         }
     }
 
-    private getEnabledRules(configuration: IConfigurationFile = DEFAULT_CONFIG, isJs: boolean): IRule[] {
+    private getEnabledRules(configuration: IConfigurationFile = DEFAULT_CONFIG, isJs: boolean): ReadonlyArray<IRule> {
         const ruleOptionsList = convertRuleOptions(isJs ? configuration.jsRules : configuration.rules);
         const rulesDirectories = arrayify(this.options.rulesDirectory)
             .concat(arrayify(configuration.rulesDirectory));

@@ -79,7 +79,8 @@ function walk(ctx: Lint.WalkContext<void>): void {
 /** 'getOverloadName' may return undefined for nodes that cannot be overloads, e.g. a `const` declaration. */
 function getMisplacedOverloads<T extends ts.Node>(
     overloads: ReadonlyArray<T>,
-    getKey: (node: T) => string | undefined): ts.SignatureDeclaration[] {
+    getKey: (node: T) => string | undefined,
+): ReadonlyArray<ts.SignatureDeclaration> {
     const result: ts.SignatureDeclaration[] = [];
     let lastKey: string | undefined;
     const seen = new Set<string>();

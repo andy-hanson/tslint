@@ -30,7 +30,7 @@ import { RuleFailure } from "./language/rule/rule";
  */
 export const ENABLE_DISABLE_REGEX = /^\s*tslint:(enable|disable)(?:-(line|next-line))?(:|\s|$)/;
 
-export function removeDisabledFailures(sourceFile: ts.SourceFile, failures: RuleFailure[]): RuleFailure[] {
+export function removeDisabledFailures(sourceFile: ts.SourceFile, failures: ReadonlyArray<RuleFailure>): ReadonlyArray<RuleFailure> {
     if (failures.length === 0) {
         // Usually there won't be failures anyway, so no need to look for "tslint:disable".
         return failures;
@@ -52,7 +52,7 @@ export function removeDisabledFailures(sourceFile: ts.SourceFile, failures: Rule
  * The map will have an array of TextRange for each disable of a rule in a file.
  * (It will have no entry if the rule is never disabled, meaning all arrays are non-empty.)
  */
-function getDisableMap(sourceFile: ts.SourceFile, failingRules: Set<string>): ReadonlyMap<string, ts.TextRange[]> {
+function getDisableMap(sourceFile: ts.SourceFile, failingRules: Set<string>): ReadonlyMap<string, ReadonlyArray<ts.TextRange>> {
     const map = new Map<string, ts.TextRange[]>();
 
     utils.forEachComment(sourceFile, (fullText, comment) => {

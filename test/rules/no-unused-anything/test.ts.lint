@@ -1,3 +1,4 @@
-function f(p: string[]) {
-    p.map(x => x);
+interface I { readonly x: string[] }
+function f({ x }: I) {
+    return x.map(s => s);
 }
