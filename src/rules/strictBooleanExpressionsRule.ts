@@ -103,7 +103,7 @@ interface Options {
     readonly allowBooleanOrUndefined: boolean;
 }
 
-function parseOptions(ruleArguments: string[], strictNullChecks: boolean): Options {
+function parseOptions(ruleArguments: ReadonlyArray<string>, strictNullChecks: boolean): Options {
     return {
         strictNullChecks,
         allowNullUnion: has(OPTION_ALLOW_NULL_UNION),

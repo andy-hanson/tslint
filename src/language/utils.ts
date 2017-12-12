@@ -27,7 +27,7 @@ export function getSourceFile(fileName: string, source: string): ts.SourceFile {
 }
 
 /** @deprecated See IDisabledInterval. */
-export function doesIntersect(failure: RuleFailure, disabledIntervals: IDisabledInterval[]): boolean { // tslint:disable-line deprecation
+export function doesIntersect(failure: RuleFailure, disabledIntervals: ReadonlyArray<IDisabledInterval>): boolean {
     return disabledIntervals.some((interval) => {
         const maxStart = Math.max(interval.startPosition, failure.getStartPosition().getPosition());
         const minEnd = Math.min(interval.endPosition, failure.getEndPosition().getPosition());
@@ -265,6 +265,7 @@ export interface TokenPosition {
     /** The start of the token including all trivia before it */
     readonly fullStart: number;
     /** The start of the token */
+    // tslint:disable-next-line no-unused-anything (TODO: remove?)
     readonly tokenStart: number;
     /** The end of the token */
     readonly end: number;

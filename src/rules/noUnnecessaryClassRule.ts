@@ -36,7 +36,7 @@ const OPTION__ALLOW_CONSTRUCTOR_ONLY = "allow-constructor-only";
 const OPTION__ALLOW_EMPTY_CLASS = "allow-empty-class";
 const OPTION__ALLOW_STATIC_ONLY = "allow-static-only";
 
-function parseOptions(options: string[]): Options {
+function parseOptions(options: ReadonlyArray<string>): Options {
     return {
         allowConstructorOnly: options.indexOf(OPTION__ALLOW_CONSTRUCTOR_ONLY) !== -1,
         allowEmptyClass: options.indexOf(OPTION__ALLOW_EMPTY_CLASS) !== -1,

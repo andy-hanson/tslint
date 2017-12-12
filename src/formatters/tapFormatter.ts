@@ -60,7 +60,7 @@ export class Formatter extends AbstractFormatter {
         return `${output.join("\n")}\n`;
     }
 
-    private mapToMessages(failures: RuleFailure[]): string[] {
+    private mapToMessages(failures: ReadonlyArray<RuleFailure>): string[] {
         return failures.map((failure: RuleFailure, i: number) => {
             const fileName = failure.getFileName();
             const failureString = failure.getFailure();

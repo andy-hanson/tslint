@@ -61,7 +61,7 @@ interface Options {
     readonly allowDeclarations: boolean;
     readonly allowNamedFunctions: boolean;
 }
-function parseOptions(ruleArguments: string[]): Options {
+function parseOptions(ruleArguments: ReadonlyArray<string>): Options {
     return {
         allowDeclarations: hasOption(OPTION_ALLOW_DECLARATIONS),
         allowNamedFunctions: hasOption(OPTION_ALLOW_NAMED_FUNCTIONS),

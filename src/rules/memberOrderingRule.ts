@@ -25,6 +25,7 @@ import { flatMap, mapDefined } from "../utils";
 const OPTION_ORDER = "order";
 const OPTION_ALPHABETIZE = "alphabetize";
 
+// tslint:disable no-unused-anything
 enum MemberKind {
     publicStaticField,
     publicStaticMethod,
@@ -42,6 +43,7 @@ enum MemberKind {
     protectedInstanceMethod,
     privateInstanceMethod,
 }
+// tslint:enable no-unused-anything
 
 const PRESETS = new Map<string, MemberCategoryJson[]>([
     ["fields-first", [
@@ -97,7 +99,7 @@ const allMemberKindNames = mapDefined(Object.keys(MemberKind), (key) => {
     return typeof mk === "number" ? MemberKind[mk].replace(/[A-Z]/g, (cap) => `-${cap.toLowerCase()}`) : undefined;
 });
 
-function namesMarkdown(names: string[]): string {
+function namesMarkdown(names: ReadonlyArray<string>): string {
     return names.map((name) => `* \`${name}\``).join("\n    ");
 }
 
@@ -319,7 +321,7 @@ function memberKindForMethodOrField(access: Access, membership: "Static" | "Inst
     return (MemberKind as any)[access + membership + kind] as MemberKind;
 }
 
-const allAccess: Access[] = ["public", "protected", "private"];
+const allAccess: ReadonlyArray<Access> = ["public", "protected", "private"];
 
 function memberKindFromName(name: string): MemberKind[] {
     const kind = (MemberKind as any)[Lint.Utils.camelize(name)];
@@ -414,7 +416,7 @@ function categoryFromOption(orderOption: MemberCategoryJson[] | string): MemberC
  * Convert from undocumented old-style options.
  * This is designed to mimic the old behavior and should be removed eventually.
  */
-function convertFromOldStyleOptions(options: string[]): MemberCategoryJson[] {
+function convertFromOldStyleOptions(options: ReadonlyArray<string>): MemberCategoryJson[] {
     let categories: NameAndKinds[] = [{ name: "member", kinds: allMemberKindNames }];
     if (hasOption("variables-before-functions")) {
         categories = splitOldStyleOptions(categories, (kind) => kind.includes("field"), "field", "method");

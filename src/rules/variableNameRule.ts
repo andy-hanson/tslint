@@ -84,7 +84,7 @@ interface Options {
     readonly allowPascalCase: boolean;
     readonly allowSnakeCase: boolean;
 }
-function parseOptions(ruleArguments: string[]): Options {
+function parseOptions(ruleArguments: ReadonlyArray<string>): Options {
     const banKeywords = hasOption(OPTION_BAN_KEYWORDS);
     return {
         banKeywords,

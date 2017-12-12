@@ -170,13 +170,17 @@ class Linter {
         };
     }
 
-    private getAllFailures(sourceFile: ts.SourceFile, enabledRules: IRule[]): RuleFailure[] {
+    private getAllFailures(sourceFile: ts.SourceFile, enabledRules: ReadonlyArray<IRule>): ReadonlyArray<RuleFailure> {
         const failures = flatMap(enabledRules, (rule) => this.applyRule(rule, sourceFile));
         return removeDisabledFailures(sourceFile, failures);
     }
 
     private applyAllFixes(
-            enabledRules: IRule[], fileFailures: RuleFailure[], sourceFile: ts.SourceFile, sourceFileName: string): RuleFailure[] {
+        enabledRules: ReadonlyArray<IRule>,
+        fileFailures: ReadonlyArray<RuleFailure>,
+        sourceFile: ts.SourceFile,
+        sourceFileName: string
+    ): ReadonlyArray<RuleFailure> {
         // When fixing, we need to be careful as a fix in one rule may affect other rules.
         // So fix each rule separately.
         let source: string = sourceFile.text;

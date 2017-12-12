@@ -91,7 +91,7 @@ export class Rule extends Lint.Rules.OptionallyTypedRule {
     }
 }
 
-function parseOptions(ruleArguments: any[]): Options {
+function parseOptions(ruleArguments: ReadonlyArray<any>): Options {
     return {
         ignoreCase: has(OPTION_IGNORE_CASE),
         matchDeclarationOrder: has(OPTION_MATCH_DECLARATION_ORDER),

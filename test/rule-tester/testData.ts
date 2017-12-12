@@ -70,12 +70,6 @@ export const resultErrs3: LintError[] = [
   { startPos: { line: 3, col: 6 }, endPos: { line: 3, col: 7 }, message: "error3: fun" },
 ];
 
-
-export const lintStr4 = "";
-export const codeStr4 = "";
-export const resultErrs4: LintError[] = [];
-
-
 // this is a ideally formatted lint string, errors ordered by start position,
 // error messages one space after end of line of code above
 export const lintStr5 = `

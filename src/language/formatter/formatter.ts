@@ -17,6 +17,7 @@
 
 import { RuleFailure } from "../rule/rule";
 
+// tslint:disable no-unused-anything
 export interface IFormatterMetadata {
     /**
      * The name of the formatter.
@@ -43,6 +44,7 @@ export interface IFormatterMetadata {
      */
     readonly consumer: ConsumerType;
 }
+// tslint:enable no-unused-anything
 
 export type ConsumerType = "human" | "machine";
 

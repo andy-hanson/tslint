@@ -35,7 +35,9 @@ const FIXES_FILE_EXTENSION = ".fix";
 
 export interface TestOutput {
     readonly skipped: false;
+    // tslint:disable-next-line no-unused-anything (TODO: use this!)
     readonly errorsFromLinter: LintError[];
+    // tslint:disable-next-line no-unused-anything (TODO: use this!)
     readonly errorsFromMarkup: LintError[];
     readonly fixesFromLinter: string;
     readonly fixesFromMarkup: string;
@@ -49,6 +51,7 @@ export interface SkippedTest {
 }
 
 export interface TestResult {
+    // tslint:disable-next-line no-unused-anything (TODO: use this!)
     readonly directory: string;
     readonly results: {
         [fileName: string]: TestOutput | SkippedTest;

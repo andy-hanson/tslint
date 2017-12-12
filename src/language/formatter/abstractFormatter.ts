@@ -20,9 +20,9 @@ import { IFormatter, IFormatterMetadata } from "./formatter";
 
 export abstract class AbstractFormatter implements IFormatter {
     public static metadata: IFormatterMetadata;
-    public abstract format(failures: RuleFailure[]): string;
+    public abstract format(failures: ReadonlyArray<RuleFailure>): string;
 
-    protected sortFailures(failures: RuleFailure[]): RuleFailure[] {
+    protected sortFailures(failures: ReadonlyArray<RuleFailure>): RuleFailure[] {
         return failures.slice().sort(RuleFailure.compare);
     }
 }

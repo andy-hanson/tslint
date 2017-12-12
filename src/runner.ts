@@ -77,6 +77,7 @@ export interface Options {
     /**
      * Output file path.
      */
+    // tslint:disable-next-line no-unused-anything (TODO: use this!)
     readonly out?: string;
 
     /**
@@ -176,7 +177,7 @@ async function runLinter(options: Options, logger: Logger): Promise<LintResult> 
 function resolveFilesAndProgram(
     { files, project, exclude, outputAbsolutePaths }: Options,
     logger: Logger,
-): { readonly files: string[]; readonly program?: ts.Program } {
+): { readonly files: ReadonlyArray<string>; readonly program?: ts.Program } {
     // remove single quotes which break matching on Windows when glob is passed in single quotes
     exclude = exclude.map(trimSingleQuotes);
 
@@ -191,7 +192,7 @@ function resolveFilesAndProgram(
 
     exclude = exclude.map((pattern) => path.resolve(pattern));
     const program = Linter.createProgram(projectPath);
-    let filesFound: string[];
+    let filesFound: ReadonlyArray<string>;
     if (files.length === 0) {
         filesFound = filterFiles(Linter.getFileNames(program), exclude, false);
     } else {
@@ -212,7 +213,7 @@ function resolveFilesAndProgram(
     return { files: filesFound, program };
 }
 
-function filterFiles(files: string[], patterns: string[], include: boolean): string[] {
+function filterFiles(files: ReadonlyArray<string>, patterns: ReadonlyArray<string>, include: boolean): ReadonlyArray<string> {
     if (patterns.length === 0) {
         return include ? [] : files;
     }
@@ -235,7 +236,7 @@ function resolveGlobs(files: string[], ignore: string[], outputAbsolutePaths: bo
     return results.map((file) => outputAbsolutePaths ? path.resolve(cwd, file) : path.relative(cwd, file));
 }
 
-async function doLinting(options: Options, files: string[], program: ts.Program | undefined, logger: Logger): Promise<LintResult> {
+async function doLinting(options: Options, files: ReadonlyArray<string>, program: ts.Program | undefined, logger: Logger): Promise<LintResult> {
     const linter = new Linter(
         {
             fix: !!options.fix,

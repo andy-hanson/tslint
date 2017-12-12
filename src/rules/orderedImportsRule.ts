@@ -352,7 +352,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         });
     }
 
-    private getGroupedImports(importDeclarations: ImportDeclaration[]): string {
+    private getGroupedImports(importDeclarations: ReadonlyArray<ImportDeclaration>): string {
         return [ImportType.LIBRARY_IMPORT, ImportType.PARENT_DIRECTORY_IMPORT, ImportType.CURRENT_DIRECTORY_IMPORT]
             .map((type) => {
                 const imports = importDeclarations.filter((importDeclaration) => importDeclaration.type === type);
@@ -526,7 +526,7 @@ function removeQuotes(value: string): string {
     return value;
 }
 
-function getSortedImportDeclarationsAsText(importDeclarations: ImportDeclaration[]): string {
+function getSortedImportDeclarationsAsText(importDeclarations: ReadonlyArray<ImportDeclaration>): string {
     const sortedDeclarations = sortByKey(importDeclarations.slice(), (x) => x.sourcePath);
     return sortedDeclarations.map((x) => x.text).join("");
 }

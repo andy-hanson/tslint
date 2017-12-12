@@ -81,7 +81,7 @@ type Options = Record<
     "branch" | "decl" | "operator" | "module" | "separator" | "restSpread" | "type" | "typecast" | "typeOperator" | "preblock",
     boolean>;
 
-function parseOptions(ruleArguments: string[]): Options {
+function parseOptions(ruleArguments: ReadonlyArray<string>): Options {
     return {
         branch: has(OPTION_BRANCH),
         decl: has(OPTION_DECL),

@@ -34,6 +34,7 @@ export * from "./language/utils";
 export * from "./language/walker";
 export * from "./language/formatter/formatter";
 
+// tslint:disable no-unused-anything
 export interface LintResult {
     readonly errorCount: number;
     readonly warningCount: number;
@@ -42,6 +43,7 @@ export interface LintResult {
     readonly format: string | FormatterConstructor;
     readonly output: string;
 }
+// tslint:enable no-unused-anything
 
 export interface ILinterOptions {
     readonly fix: boolean;

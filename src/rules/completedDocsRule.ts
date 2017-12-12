@@ -401,7 +401,7 @@ function walk(context: Lint.WalkContext<ExclusionsMap>, typeChecker: ts.TypeChec
         checkComments(node, describeNode(nodeType), comments, requirementNode);
     }
 
-    function checkComments(node: ts.Node, nodeDescriptor: string, comments: ts.SymbolDisplayPart[], requirementNode: ts.Node) {
+    function checkComments(node: ts.Node, nodeDescriptor: string, comments: ReadonlyArray<ts.SymbolDisplayPart>, requirementNode: ts.Node) {
         if (comments.map((comment: ts.SymbolDisplayPart) => comment.text).join("").trim() === "") {
             addDocumentationFailure(node, nodeDescriptor, requirementNode);
         }

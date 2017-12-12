@@ -16,20 +16,24 @@
  */
 
 import assert = require("assert");
-import { hasModifier, isSymbolFlagSet } from "tsutils";
+import { hasModifier, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
 import { skipAlias } from "./noUnnecessaryQualifierRule";
 import { getSymbolDeprecation } from './deprecationRule';
+import { getEqualsKind } from '..';
 
+//todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
-//TODO: warning for things created but never read
-//todo: test that we detect unused enum members
 //todo: detect parameter of recursive fn only passed to another instance of the same fn
-//TODO: error if optional property is never created/written to
 //todo: detect recursive unused functions (maybe a different rule for that)
 //todo: document that `@deprecated` comments disable this rule
+//todo: recommend const enum if enum is never indexed
+
+//todo: warn on optional parameters never passed
+
+//todo: separate rule: no-mutate-method
 
 export class Rule extends Lint.Rules.TypedRule {
     /* tslint:disable:object-literal-sort-keys */
@@ -84,25 +88,42 @@ class Walker extends Lint.AbstractWalker<Options> {
             switch (node.kind) {
                 case ts.SyntaxKind.PropertySignature:
                 case ts.SyntaxKind.PropertyDeclaration:
-                    this.handleProp(node as ts.PropertyDeclaration | ts.PropertySignature);
+                    this.handleProperty(node as ts.PropertyDeclaration | ts.PropertySignature);
                     break;
-                case ts.SyntaxKind.Parameter:
+                case ts.SyntaxKind.Parameter: {
+                    const p = node as ts.ParameterDeclaration;
                     if (ts.isParameterPropertyDeclaration(node)) {
-                        this.handleProp(node as ts.ParameterDeclaration);
+                        this.handleProperty(p);
                     } else {
-                        //todo
+                        //TODO: for a signature, look into its implementers for uses
+                        if (!!(p.parent! as any).body //obs a parameter in a signature isn't "used"
+                            && ts.isIdentifier(p.name)
+                            && p.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { //todo: handle 'this'
+                            //tslint:disable-next-line no-unused-anything
+                            this.handleSymbol(p as ts.ParameterDeclaration & { readonly name: ts.Identifier });
+                        }
                     }
                     break;
-                default:
-                    if (isElementOfClass(node)) {
-                        if (!this.info.classElementsUsedPublicly.has(node)
-                            //If abstract, it may only be used in this class, but still can't be private.
-                            && !hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)
-                            && !isOverload(node, this.checker)
-                            && !isOverride(node, this.checker)
-                            && !isDeprecated(node, this.checker)) {
-                            this.addFailureAtNode(node, "Class element not used publicly.");
+                }
+                case ts.SyntaxKind.EnumMember: {
+                    const sym = this.checker.getSymbolAtLocation((node as ts.EnumMember).name)!;
+                    const flags = this.info.enumMembers.get(sym);
+                    if (flags === undefined) {
+                        this.addFailureAtNode(node, "UNUSED");
+                    }
+                    else {
+                        if (!hasEnumAccessFlag(flags, EnumAccessFlags.UsedInExpression)) {
+                            this.addFailureAtNode(node,
+                                hasEnumAccessFlag(flags, EnumAccessFlags.Tested)
+                                ? "Enum flag is compared against, but never actually used."
+                                : "Enum flag is never used");
                         }
+                    }
+                    break;
+                }
+                default:
+                    if (isTested(node)) {
+                        this.handleSymbol(node);
                     }
             }
             node.forEachChild(cb);
@@ -110,21 +131,59 @@ class Walker extends Lint.AbstractWalker<Options> {
         sourceFile.forEachChild(cb);
     }
 
-    private handleProp(p: PropertyDeclarationLike): void {
-        if (!ts.isIdentifier(p.name)) {
+    private handleSymbol(node: Tested): void {
+        const sym = this.checker.getSymbolAtLocation(node.name)!;
+        assert(!!sym);
+
+        if (isOkToNotUse(node, sym, this.checker)) {
             return;
         }
+
+        const info = this.info.properties.get(sym);
+        if (info === undefined) {
+            this.addFailureAtNode(node, "UNUSED"); //!
+        }
+        else {
+            if (info.public === AccessFlags.None
+                //If abstract, it may only be used in this class, but still can't be private.
+                && !hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
+                this.addFailureAtNode(node, "Class element not used publicly.");
+            }
+
+            if (!info.everRead()) {
+                this.addFailureAtNode(node, "Element is created/written to but never read")
+            }
+
+            //If it's an array, check use
+            //todo: map and set too
+            //todo: unions too
+            //todo: would like a type checker api...
+            const typeNode = ts.isVariableDeclaration(node)
+                //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
+                || ts.isParameter(node) && node.dotDotDotToken === undefined
+                || ts.isPropertyDeclaration(node)
+                ? node.type
+                : undefined;
+            if (typeNode) {
+                if (typeNode.kind === ts.SyntaxKind.ArrayType) {//todo: also array<>
+                    if (!this.info.symbolToTypeIsMutated.has(sym)) {
+                        this.addFailureAtNode(typeNode, "Could be readonly bro");
+                    }
+                }
+            }
+        }
+    }
+
+    private handleProperty(p: PropertyDeclarationLike): void {
+        if (!ts.isIdentifier(p.name)) return;
         if (this.options.ignoreNames.has(p.name.text)) { //test
             return;
         }
 
-
         const sym = p.kind === ts.SyntaxKind.Parameter ? getThePropertySymbol(p, this.checker) : this.checker.getSymbolAtLocation(p.name)!;
         assert(!!sym);
 
-        //console.log((sym as any).id, sym.declarations![0].getText());
         const x = this.info.properties.get(sym);
-        //console.log(x); //kill
         if (x === undefined) {
             this.addFailureAtNode(p, "Property is unused.");
         }
@@ -135,23 +194,55 @@ class Walker extends Lint.AbstractWalker<Options> {
             if (!x.everMutated() && !hasModifier(p.modifiers, ts.SyntaxKind.ReadonlyKeyword)) {
                 this.addFailureAtNode(p, "Property can be made readonly.");
             }
+            if (!x.everRead()) {
+                this.addFailureAtNode(p, "Element is created/written to but never read") //dup
+            }
+            if (!x.everCreatedOrMutated()) {
+                if (this.info.interfaceIsDirectlyCreated.has((sym as any).parent)) { //!
+                    this.addFailureAtNode(p, "Property is read but never created or written to.")
+                }
+            }
         }
     }
 }
 
+//name
+type Tested = (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration) & { readonly name: ts.Identifier }; //tslint:disable-line no-unused-anything
+function isTested(node: ts.Node): node is Tested {
+    return (isElementOfClassOrInterface(node) || ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isIdentifier(node.name);
+}
+
+function isTestedElement(node: Tested): node is ElementOfClassOrInterface {
+    switch (node.kind) {
+        case ts.SyntaxKind.VariableDeclaration:
+        case ts.SyntaxKind.Parameter:
+            return false;
+        default:
+            return true;
+    }
+}
+
+function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+    return isIgnored(node) || isDeprecated(node, symbol, checker) || isTestedElement(node) && (isOverload(node, checker)  || isOverride(node, checker));
+}
+
+function isIgnored(node: Tested): boolean {
+    return node.name.text.startsWith("_");
+}
+
 //todo: handle overloads
-function isOverload(node: ElementOfClass, checker: ts.TypeChecker): boolean {
+function isOverload(node: ElementOfClassOrInterface, checker: ts.TypeChecker): boolean {
     return ts.isMethodDeclaration(node) && checker.getSymbolAtLocation(node.name)!.declarations!.length !== 1;
 }
 
 //handle interface too
-function isDeprecated(node: ElementOfClass, checker: ts.TypeChecker) {
-    const sym = checker.getSymbolAtLocation(node.name)!;
-    return getSymbolDeprecation(sym) !== undefined
-        || node.parent.name && getSymbolDeprecation(checker.getSymbolAtLocation(node.parent.name)!) !== undefined;
+function isDeprecated(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker) {
+    return getSymbolDeprecation(symbol) !== undefined
+        //or the class is deprecated (thus all the members are)
+        || isTestedElement(node) && node.parent.name && getSymbolDeprecation(checker.getSymbolAtLocation(node.parent.name)!) !== undefined;
 }
 
-function isOverride(node: ElementOfClass, checker: ts.TypeChecker): boolean { //test
+function isOverride(node: ElementOfClassOrInterface, checker: ts.TypeChecker): boolean { //test
     const name = node.name.text;
     //const sym = checker.getSymbolAtLocation(node)!;
     const { heritageClauses } = node.parent;
@@ -160,12 +251,10 @@ function isOverride(node: ElementOfClass, checker: ts.TypeChecker): boolean { //
             checker.getPropertyOfType(checker.getTypeFromTypeNode(typeNode), name) !== undefined));
 }
 
-
 function getThePropertySymbol(p: ts.ParameterDeclaration, checker: ts.TypeChecker) { //name
     return checker.getSymbolsOfParameterPropertyDeclaration(p, (p.name as ts.Identifier).text)
         .find(s => isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
 }
-
 
 const infoCache = new WeakMap<ts.Program, Info>();
 
@@ -182,18 +271,27 @@ function getInfoWorker(program: ts.Program): Info {
 }
 
 interface Info {
-    readonly properties: ReadonlyMap<ts.Symbol, PropertyInfo>;
-    readonly classElementsUsedPublicly: ReadonlySet<ts.ClassElement>;
+    readonly properties: ReadonlyMap<ts.Symbol, SymbolInfo>;
+    readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>;
+    readonly interfaceIsDirectlyCreated: ReadonlySet<ts.Symbol>;
+    readonly symbolToTypeIsMutated: ReadonlySet<ts.Symbol>; //name
 }
 
 //name
 class Foo {
     constructor(private readonly checker: ts.TypeChecker) {}
-    private readonly properties = new Map<ts.Symbol, PropertyInfo>();
-    private readonly classElementsUsedPublicly = new Set<ts.ClassElement>();
+    private readonly properties = new Map<ts.Symbol, SymbolInfo>(); //name
+    private readonly enumMembers = new Map<ts.Symbol, EnumAccessFlags>();
+    private readonly interfaceIsDirectlyCreated = new Set<ts.Symbol>();
+    private readonly symbolToTypeIsMutated = new Set<ts.Symbol>();
 
     finish(): Info {
-        return { properties: this.properties, classElementsUsedPublicly: this.classElementsUsedPublicly };
+        return {
+            properties: this.properties,
+            enumMembers: this.enumMembers,
+            interfaceIsDirectlyCreated: this.interfaceIsDirectlyCreated,
+            symbolToTypeIsMutated: this.symbolToTypeIsMutated,
+        };
     }
 
     analyze(file: ts.SourceFile): void {
@@ -213,6 +311,12 @@ class Foo {
                 case ts.SyntaxKind.ClassExpression:
                     node.forEachChild(x => cb(x, node as ts.ClassLikeDeclaration));
                     break;
+                case ts.SyntaxKind.ObjectLiteralExpression: {
+                    const type = this.checker.getContextualType(node as ts.ObjectLiteralExpression);
+                    if (type && type.symbol) {
+                        this.interfaceIsDirectlyCreated.add(type.symbol);
+                    }
+                }
                 default:
                     node.forEachChild(x => cb(x, currentClass));//name
             }
@@ -221,39 +325,38 @@ class Foo {
     }
 
     private trackSymbolUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {
-        const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(sym, this.checker); //name
-        if (xx) {
-            sym = xx;
+        if (isSymbolFlagSet(sym, ts.SymbolFlags.EnumMember)) {
+            this.trackEnumMemberUse(node, sym);
+        } else {
+            this.fff(node, sym, currentClass);
         }
-        if (sym.flags & ts.SymbolFlags.Transient) {
-            //todo: we shouldn't get these coming out of `getSymbolAtLocation`...
-            sym = (sym as any).target || sym;
-        }
+    }
+
+    private trackEnumMemberUse(node: ts.Identifier, sym: ts.Symbol) {
+        const prevFlags = this.enumMembers.get(sym);
+        const flags = accessFlagsForEnumAccess(node);
+        this.enumMembers.set(sym, flags | (prevFlags === undefined ? EnumAccessFlags.None : prevFlags));
+    }
+
+    private fff(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
+        sym = skipTransient(skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(sym, this.checker)); //name
         const o = getContainingObjectLiteralElement(node);
         if (o) {
             for (const x of getPropertySymbolsFromContextualType(o, this.checker)) {
-                //todo: might actually be a method
-                this.trackPropertyUse(node, x, currentClass);
+                this.xxx(node, x, currentClass);
+            }
+            //we're doing this both for the property and for the value referenced by shorthand
+            //test: function f(x) return { x };
+            const parent = node.parent!;
+            if (ts.isShorthandPropertyAssignment(parent)) {
+                const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
+                this.xxx(node, v, currentClass);
             }
         }
-        else if (isSymbolFlagSet(sym, ts.SymbolFlags.Property)) {
-            if (isPropertyDeclarationLike(node.parent!)) {
-                //this *is* the declaration.
-                return;
-            }
-
-            //showFlags(sym);
-            //const paramprop = sym.declarations.find(d => ts.isParameterPropertyDeclaration(d)) as ts.ParameterDeclaration | undefined;
-            //if (paramprop) {
-            //    const sym2 = getThePropertySymbol(paramprop, this.checker);
-            //    //assert(sym2 !== sym); //why?
-            //    sym = sym2;
-            //}
-
-            for (const s of this.checker.getRootSymbols(sym)) {
-                this.trackPropertyUse(node, s, currentClass);
-            }
+        else {
+            this.xxx(node, sym, currentClass);
         }
+        /*
         else {
             for (const s of this.checker.getRootSymbols(sym)) {
                 const v = s.valueDeclaration; //name
@@ -264,29 +367,86 @@ class Foo {
                 }
             }
         }
-
-        //todo: handle other kinds of things (methods)
+        */
     }
 
-   private  trackPropertyUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {//name
+    private xxx(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
+        for (const s of this.checker.getRootSymbols(sym)) {
+            this.trackUse(node, s, currentClass);
+        }
+    }
+
+    private trackUse(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {//name
         if (sym.declarations === undefined) {
             return;
         }
 
-        const info = createIfNotSet(this.properties, sym, () => new PropertyInfo());
+        const info = createIfNotSet(this.properties, sym, () => new SymbolInfo()); //if not a property -- fine, whatever
         const newFlags = accessFlags(node, sym);
         if (sym.declarations.some(d => d.parent === currentClass)) {
             info.private = info.private | newFlags;
         } else {
             info.public = info.public | newFlags;
         }
+
+        //track use of the type -- if this is array or map or set, see if we mutate it
+        if (isPossiblyMutableUse(node, this.checker)) {
+            this.symbolToTypeIsMutated.add(sym);
+        }
     }
 }
 
+function isPossiblyMutableUse(node: ts.Expression, checker: ts.TypeChecker): boolean {
+    //TODO: `x[0]` is immutable but `x[0] = 1` isn't
+
+    const parent = node.parent!;
+    if (ts.isPropertyAccessExpression(parent)) {
+        if (parent.name === node) {//prefer conditional
+            //x.y.z.array
+            return isPossiblyMutableUse(parent, checker);
+        } else {
+            assert(parent.expression === node);
+            //Check that it's not a mutating method
+            return isMutatingMethodName(parent.name.text);
+        }
+    }
+    //todo: more like this
+    if (ts.isVariableDeclaration(parent) && parent.name === node) {
+        return false;
+    }
+    if (ts.isParameter(parent) && parent.name === node) {
+        return false;
+    }
+    return true; //todo: do better... If we pass it to a fn taking readonlyarray it's fine...
+}
+
+function isMutatingMethodName(name: string): boolean {
+    switch (name) {
+        case "pop":
+        case "push":
+        case "sort":
+        case "splice":
+            return true;
+        //todo...
+        default:
+            return false;
+    }
+}
+
+
 //TODO: handle non-identifier
-type ElementOfClass = ts.ClassElement & { readonly parent: ts.ClassLikeDeclaration; readonly name: ts.Identifier; };
-function isElementOfClass(node: ts.Node): node is ElementOfClass {
-    return ts.isClassElement(node) && node.name !== undefined && ts.isIdentifier(node.name) && ts.isClassLike(node.parent!);
+type ElementOfClassOrInterface =
+    // tslint:disable no-unused-anything (This is a TypeScript bug. See https://github.com/Microsoft/TypeScript/pull/20609)
+    (ts.ClassElement | ts.TypeElement) & {
+        readonly parent: ts.ClassLikeDeclaration | ts.InterfaceDeclaration;
+        readonly name: ts.Identifier;
+    };
+    // tslint:enable no-unused-anything
+function isElementOfClassOrInterface(node: ts.Node): node is ElementOfClassOrInterface {
+    return (ts.isClassElement(node) || ts.isTypeElement(node))
+        && node.name !== undefined
+        && ts.isIdentifier(node.name)
+        && (ts.isClassLike(node.parent!) || ts.isInterfaceDeclaration(node.parent!));
 }
 
 //!
@@ -295,7 +455,7 @@ export function showFlags(sym: ts.Symbol) {
     for (const name in ts.SymbolFlags) {
         const val = ts.SymbolFlags[name];
         if (typeof val !== "number") continue;
-        if (sym.flags & val) {
+        if (isSymbolFlagSet(sym, val)) {
             all.push(name);
         }
     }
@@ -303,9 +463,9 @@ export function showFlags(sym: ts.Symbol) {
 }
 
 type PropertyDeclarationLike = ts.PropertyDeclaration | ts.ParameterDeclaration | ts.PropertySignature;
-function isPropertyDeclarationLike(node: ts.Node): node is PropertyDeclarationLike {
-    return ts.isPropertyDeclaration(node) || ts.isPropertySignature(node) || ts.isParameterPropertyDeclaration(node);
-}
+//function isPropertyDeclarationLike(node: ts.Node): node is PropertyDeclarationLike {
+//    return ts.isPropertyDeclaration(node) || ts.isPropertySignature(node) || ts.isParameterPropertyDeclaration(node);
+//}
 
 function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: () => V): V {
     const already = map.get(key); //name
@@ -318,11 +478,15 @@ function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key
     }
 }
 
-class PropertyInfo {
+class SymbolInfo {
     private = AccessFlags.None;
     public = AccessFlags.None;
 
     //todo: detect created-but-never-read
+
+    everCreatedOrMutated(): boolean {
+        return hasAccessFlag(this.private, AccessFlags.Create | AccessFlags.Mutate) || hasAccessFlag(this.public, AccessFlags.Create | AccessFlags.Mutate);
+    }
 
     everMutated(): boolean {
         return hasAccessFlag(this.private, AccessFlags.Mutate) || hasAccessFlag(this.public, AccessFlags.Mutate);
@@ -330,6 +494,10 @@ class PropertyInfo {
 
     everUsedPublicly(): boolean {
         return this.public !== AccessFlags.None;
+    }
+
+    everRead(): boolean {
+        return hasAccessFlag(this.private, AccessFlags.Read) || hasAccessFlag(this.public, AccessFlags.Read);
     }
 }
 function hasAccessFlag(a: AccessFlags, b: AccessFlags): boolean {
@@ -343,15 +511,32 @@ const enum AccessFlags {
     /** Only reads from a variable. */
     Read = 2 ** 0,
     /** Only writes to a variable without using the result. E.g.: `x++;`. */
-    Mutate = 2 ** 1,
+    Mutate = 2 ** 1, //If this is a method, this will be ignored.
     /** Creates it */
     Create = 2 ** 2,
 }
 function accessFlags(node: ts.Node, symbol: ts.Symbol): AccessFlags {
     const parent = node.parent!;
+    if (ts.isTypeElement(parent)) {
+        return AccessFlags.None;
+    }
+
     switch (parent.kind) {
+        case ts.SyntaxKind.Parameter:
+            return AccessFlags.Create;
+        case ts.SyntaxKind.PropertyDeclaration:
+            return createIf((parent as ts.PropertyDeclaration).initializer !== undefined);
+        case ts.SyntaxKind.MethodDeclaration:
+            return createIf((parent as ts.MethodDeclaration).body !== undefined);
+        case ts.SyntaxKind.GetAccessor:
+        case ts.SyntaxKind.SetAccessor:
+            return AccessFlags.Create;
         case ts.SyntaxKind.PropertyAssignment:
-        case ts.SyntaxKind.ShorthandPropertyAssignment: //test
+            return (parent as ts.PropertyAssignment).name === node ? AccessFlags.Create : AccessFlags.Read;
+        case ts.SyntaxKind.ShorthandPropertyAssignment:
+            //If this is the property symbol, this creates it. Otherwise this is reading a local variable.
+            return symbol.flags & ts.SymbolFlags.Property ? AccessFlags.Create : AccessFlags.Read;
+        case ts.SyntaxKind.MethodDeclaration:
             return AccessFlags.Create;
         case ts.SyntaxKind.PostfixUnaryExpression:
         case ts.SyntaxKind.PrefixUnaryExpression:
@@ -368,12 +553,65 @@ function accessFlags(node: ts.Node, symbol: ts.Symbol): AccessFlags {
             return AccessFlags.Read;
     }
 
+    function createIf(b: boolean): AccessFlags {
+        return b ? AccessFlags.Create : AccessFlags.None;
+    }
+
     function writeOrReadWrite(): AccessFlags { //name
         // If grandparent is not an ExpressionStatement, this is used as an expression in addition to having a side effect.
         const shouldRead = !parent.parent || parent!.parent!.kind !== ts.SyntaxKind.ExpressionStatement;
         const flags = isInOwnConstructor(node, symbol) ? AccessFlags.Create : AccessFlags.Mutate;
         return shouldRead ? flags | AccessFlags.Read : flags;
     }
+}
+
+const enum EnumAccessFlags {
+    None = 0,
+    Tested = 2 ** 0,
+    UsedInExpression = 2 ** 1,
+}
+function hasEnumAccessFlag(a: EnumAccessFlags, b: EnumAccessFlags): boolean {
+    return (a & b) !== EnumAccessFlags.None;
+}
+
+function accessFlagsForEnumAccess(n: ts.Identifier): EnumAccessFlags {
+    const parent0 = n.parent!;
+    if (ts.isEnumMember(parent0)) {
+        return EnumAccessFlags.None;
+    }
+
+    if (!ts.isPropertyAccessExpression(parent0)) {
+        assert(ts.isQualifiedName(parent0));
+        assert((ts as any).isPartOfTypeNode(parent0));
+        return EnumAccessFlags.None;
+    }
+
+    assert(ts.isPropertyAccessExpression(parent0));
+    const parent = parent0.parent!;
+    switch (parent.kind) {
+        case ts.SyntaxKind.CaseClause:
+            return EnumAccessFlags.Tested;
+        case ts.SyntaxKind.BinaryExpression:
+            return getEqualsKind((parent as ts.BinaryExpression).operatorToken) !== undefined
+                ? EnumAccessFlags.Tested
+                : EnumAccessFlags.UsedInExpression;
+        default:
+            return EnumAccessFlags.UsedInExpression;
+    }
+    /*switch (parent.kind) {
+        case ts.SyntaxKind.BinaryExpression: {
+            const { operatorToken } = parent as ts.BinaryExpression;
+            return isAssignmentOperator(operatorToken.kind) ? EnumAccessFlags.Tested : EnumAccessFlags.UsedInExpression;
+        }
+        //initializer
+        case ts.SyntaxKind.PropertyAssignment:
+        case ts.SyntaxKind.Parameter:
+        case ts.SyntaxKind.PropertyDeclaration:
+        case ts.SyntaxKind.VariableDeclaration:
+            return EnumAccessFlags.UsedInExpression;
+        default:
+            return EnumAccessFlags.Tested;
+    }*/
 }
 
 function isInOwnConstructor(node: ts.Node, symbol: ts.Symbol): boolean { //test
@@ -400,8 +638,14 @@ function isAssignmentOperator(token: ts.SyntaxKind): boolean {
 }
 
 
-
-
+function skipTransient(sym: ts.Symbol): ts.Symbol {
+    //todo: we shouldn't get these coming out of `getSymbolAtLocation`...
+    return isSymbolFlagSet(sym, ts.SymbolFlags.Transient) ? (sym as any).target || sym : sym;
+}
+function skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol { //name
+    const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, checker);
+    return xx === undefined ? symbol : xx;
+}
 
 
 
@@ -411,7 +655,6 @@ function isAssignmentOperator(token: ts.SyntaxKind): boolean {
 //TODO: should be a method on checker
 function getObjectBindingElementWithoutPropertyName(symbol: ts.Symbol): ts.BindingElement | undefined {
     const bindingElement = symbol.declarations && symbol.declarations.find(ts.isBindingElement);
-    //console.log(symbol.declarations![0].getText());
     if (bindingElement &&
         bindingElement.parent!.kind === ts.SyntaxKind.ObjectBindingPattern &&
         !bindingElement.propertyName) {
@@ -421,15 +664,13 @@ function getObjectBindingElementWithoutPropertyName(symbol: ts.Symbol): ts.Bindi
 }
 function getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
     const bindingElement = getObjectBindingElementWithoutPropertyName(symbol);
-    //console.log("??");
     if (!bindingElement) return undefined;
-    //console.log("??");
 
     const typeOfPattern = checker.getTypeAtLocation(bindingElement.parent!);
     const propSymbol = typeOfPattern && checker.getPropertyOfType(typeOfPattern, (<ts.Identifier>bindingElement.name).text);
-    if (propSymbol && propSymbol.flags & ts.SymbolFlags.Accessor) {
+    if (propSymbol && isSymbolFlagSet(propSymbol, ts.SymbolFlags.Accessor)) {
         // See GH#16922
-        assert(!!(propSymbol.flags & ts.SymbolFlags.Transient));
+        assert(isSymbolFlagSet(propSymbol, ts.SymbolFlags.Transient));
         return (propSymbol as any/*ts.TransientSymbol*/).target;
     }
     return propSymbol;
@@ -474,7 +715,7 @@ function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, che
             result.push(symbol);
         }
 
-        if (contextualType.flags & ts.TypeFlags.Union) {
+        if (isTypeFlagSet(contextualType, ts.TypeFlags.Union)) {
             for (const t of (<ts.UnionType>contextualType).types) {
                 const symbol = t.getProperty(name);
                 if (symbol) {

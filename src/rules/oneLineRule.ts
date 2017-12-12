@@ -26,13 +26,7 @@ const OPTION_ELSE = "check-else";
 const OPTION_FINALLY = "check-finally";
 const OPTION_WHITESPACE = "check-whitespace";
 
-interface Options {
-    readonly brace: boolean;
-    readonly catch: boolean;
-    readonly else: boolean;
-    readonly finally: boolean;
-    readonly whitespace: boolean;
-}
+type Options = Record<"brace" | "catch" | "else" | "finally" | "whitespace", boolean>;
 
 export class Rule extends Lint.Rules.AbstractRule {
     /* tslint:disable:object-literal-sort-keys */

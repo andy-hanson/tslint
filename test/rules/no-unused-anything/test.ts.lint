@@ -1,4 +1,3 @@
-class C {
-    m() {}
+function f(p: string[]) {
+    p.map(x => x);
 }
-new C().m();

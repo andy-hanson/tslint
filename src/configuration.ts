@@ -30,6 +30,7 @@ export interface IConfigurationFile {
      * The severity that is applied to rules in _this_ config with `severity === "default"`.
      * Not inherited.
      */
+    // tslint:disable-next-line no-unused-anything (TODO: Figure out what this was for)
     readonly defaultSeverity?: RuleSeverity;
 
     /**
@@ -61,6 +62,7 @@ export interface IConfigurationFile {
 }
 
 export interface IConfigurationLoadResult {
+    // tslint:disable-next-line no-unused-anything (TODO: remove?)
     readonly path?: string;
     results?: IConfigurationFile;
 }
@@ -250,7 +252,7 @@ export function loadConfigurationFromPath(configFilePath?: string, originalFileP
 
         // load configurations, in order, using their identifiers or relative paths
         // apply the current configuration last by placing it last in this array
-        const configs: IConfigurationFile[] = configFile.extends.map((name) => {
+        const configs: ReadonlyArray<IConfigurationFile> = configFile.extends.map((name) => {
             const nextConfigFilePath = resolveConfigurationPath(name, configFileDir);
             return loadConfigurationFromPath(nextConfigFilePath, originalFilePath);
         }).concat([configFile]);
@@ -454,6 +456,7 @@ function parseRuleOptions(ruleConfigValue: RawRuleConfig, rawDefaultRuleSeverity
     };
 }
 
+// tslint:disable no-unused-anything (TODO: add tests for all properties)
 export interface RawConfigFile {
     readonly extends?: string | string[];
     readonly linterOptions?: IConfigurationFile["linterOptions"];
@@ -462,6 +465,7 @@ export interface RawConfigFile {
     readonly rules?: RawRulesConfig;
     readonly jsRules?: RawRulesConfig;
 }
+// tslint:enable no-unused-anything
 export interface RawRulesConfig {
     [key: string]: RawRuleConfig;
 }

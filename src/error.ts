@@ -23,6 +23,7 @@ const shownWarnings = new Set<string>();
  * Using the `node` version causes a compilation error when this code is used as an npm library if @types/node is not already imported.
  */
 export declare class Error {
+    // tslint:disable-next-line no-unused-anything (TODO: remove?)
     public name?: string;
     public readonly message: string;
     public readonly stack?: string;
