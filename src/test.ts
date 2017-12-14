@@ -58,7 +58,7 @@ export interface TestResult {
     };
 }
 
-export function runTests(patterns: string[], rulesDirectory?: string | string[]): TestResult[] {
+export function runTests(patterns: ReadonlyArray<string>, rulesDirectory?: string | string[]): ReadonlyArray<TestResult> {
     const files: string[] = [];
     for (let pattern of patterns) {
         if (path.basename(pattern) !== "tslint.json") {
@@ -199,7 +199,7 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
     return results;
 }
 
-export function consoleTestResultsHandler(testResults: TestResult[], logger: Logger): boolean {
+export function consoleTestResultsHandler(testResults: ReadonlyArray<TestResult>, logger: Logger): boolean {
     let didAllTestsPass = true;
 
     for (const testResult of testResults) {
@@ -247,7 +247,7 @@ export function consoleTestResultHandler(testResult: TestResult, logger: Logger)
     return didAllTestsPass;
 }
 
-function displayDiffResults(diffResults: diff.IDiffResult[], extension: string, logger: Logger) {
+function displayDiffResults(diffResults: ReadonlyArray<diff.IDiffResult>, extension: string, logger: Logger) {
     logger.log(chalk.green(`Expected (from ${extension} file)\n`));
     logger.log(chalk.red("Actual (from TSLint)\n"));
 

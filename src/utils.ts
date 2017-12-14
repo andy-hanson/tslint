@@ -18,7 +18,9 @@
 /**
  * Enforces the invariant that the input is an array.
  */
-export function arrayify<T>(arg?: T | T[]): T[] {
+export function arrayify<T>(arg?: T | T[]): T[];
+export function arrayify<T>(arg?: T | ReadonlyArray<T>): ReadonlyArray<T>;
+export function arrayify<T>(arg?: T | T[]): ReadonlyArray<T> {
     if (Array.isArray(arg)) {
         return arg;
     } else if (arg != undefined) {
@@ -128,7 +130,7 @@ export function arraysAreEqual<T>(a: ReadonlyArray<T> | undefined, b: ReadonlyAr
 }
 
 /** Returns the first non-`undefined` result. */
-export function find<T, U>(inputs: T[], getResult: (t: T) => U | undefined): U | undefined {
+export function find<T, U>(inputs: ReadonlyArray<T>, getResult: (t: T) => U | undefined): U | undefined {
     for (const element of inputs) {
         const result = getResult(element);
         if (result !== undefined) {

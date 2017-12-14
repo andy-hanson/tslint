@@ -203,7 +203,7 @@ class Linter {
 
     // Only "protected" because a test directly accesses it.
     // tslint:disable-next-line member-ordering
-    protected applyFixes(sourceFilePath: string, source: string, fixableFailures: RuleFailure[]): string {
+    protected applyFixes(sourceFilePath: string, source: string, fixableFailures: ReadonlyArray<RuleFailure>): string {
         const fixesByFile = createMultiMap(fixableFailures, (f) => [f.getFileName(), f.getFix()!]);
         fixesByFile.forEach((fileFixes, filePath) => {
             let fileNewSource: string;
@@ -273,7 +273,7 @@ namespace Linter { }
 
 export = Linter;
 
-function createMultiMap<T, K, V>(inputs: T[], getPair: (input: T) => [K, V] | undefined): Map<K, V[]> {
+function createMultiMap<T, K, V>(inputs: ReadonlyArray<T>, getPair: (input: T) => [K, V] | undefined): Map<K, V[]> {
     const map = new Map<K, V[]>();
     for (const input of inputs) {
         const pair = getPair(input);

@@ -29,7 +29,7 @@ export class Formatter extends AbstractFormatter {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public format(failures: RuleFailure[]): string {
+    public format(failures: ReadonlyArray<RuleFailure>): string {
         if (failures.length === 0) {
             return "";
         }

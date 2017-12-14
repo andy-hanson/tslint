@@ -364,7 +364,7 @@ function getMemberKind(member: Member): MemberKind | undefined {
     }
 }
 
-type MemberCategoryJson = { readonly name: string; readonly kinds: string[] } | string;
+type MemberCategoryJson = { readonly name: string; readonly kinds: ReadonlyArray<string> } | string;
 class MemberCategory {
     constructor(readonly name: string, private readonly kinds: Set<MemberKind>) {}
     public has(kind: MemberKind) { return this.kinds.has(kind); }
@@ -380,14 +380,14 @@ interface Options {
     readonly alphabetize: boolean;
 }
 
-function parseOptions(options: any[]): Options {
+function parseOptions(options: ReadonlyArray<any>): Options {
     const { order: orderJson, alphabetize } = getOptionsJson(options);
     const order = orderJson.map((cat) => typeof cat === "string"
         ? new MemberCategory(cat.replace(/-/g, " "), new Set(memberKindFromName(cat)))
         : new MemberCategory(cat.name, new Set(flatMap(cat.kinds, memberKindFromName))));
     return { order, alphabetize };
 }
-function getOptionsJson(allOptions: any[]): { readonly order: MemberCategoryJson[]; readonly alphabetize: boolean } {
+function getOptionsJson(allOptions: ReadonlyArray<any>): { readonly order: ReadonlyArray<MemberCategoryJson>; readonly alphabetize: boolean } {
     if (allOptions == undefined || allOptions.length === 0 || allOptions[0] == undefined) {
         throw new Error("Got empty options");
     }
@@ -435,7 +435,7 @@ function convertFromOldStyleOptions(options: ReadonlyArray<string>): MemberCateg
     }
 }
 interface NameAndKinds { readonly name: string; readonly kinds: string[]; }
-function splitOldStyleOptions(categories: NameAndKinds[], filter: (name: string) => boolean, a: string, b: string): NameAndKinds[] {
+function splitOldStyleOptions(categories: ReadonlyArray<NameAndKinds>, filter: (name: string) => boolean, a: string, b: string): NameAndKinds[] {
     const newCategories: NameAndKinds[]  = [];
     for (const cat of categories) {
         const yes = []; const no = [];

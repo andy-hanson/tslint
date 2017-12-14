@@ -26,7 +26,7 @@ import { ITagExclusionDescriptor, TagExclusion } from "./tagExclusion";
 export type ExclusionsMap = Map<DocType, Array<Exclusion<any>>>;
 
 export class ExclusionFactory {
-    public constructExclusionsMap(ruleArguments: IInputExclusionDescriptors[]): ExclusionsMap {
+    public constructExclusionsMap(ruleArguments: ReadonlyArray<IInputExclusionDescriptors>): ExclusionsMap {
         const exclusionsMap: ExclusionsMap = new Map();
 
         for (const ruleArgument of ruleArguments) {

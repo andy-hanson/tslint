@@ -131,7 +131,7 @@ function walk(ctx: Lint.WalkContext<Options>) {
     });
 }
 
-function getQuotemarkPreference(args: any[]): string | undefined {
+function getQuotemarkPreference(args: ReadonlyArray<any>): string | undefined {
     for (const arg of args) {
         if (arg === OPTION_SINGLE || arg === OPTION_DOUBLE) {
             return arg as string;

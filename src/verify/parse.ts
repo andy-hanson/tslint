@@ -213,7 +213,7 @@ function formatMessage(templates: Map<string, string>, message: string): string 
  * Whitespace between tokens is ignored.
  * Trailing comma is allowed.
  */
-function parseFormatArguments(text: string): string[] | undefined {
+function parseFormatArguments(text: string): ReadonlyArray<string> | undefined {
     if (scanner === undefined) {
         // once the scanner is created, it is cached for subsequent calls
         scanner = ts.createScanner(ts.ScriptTarget.Latest, false);
@@ -246,7 +246,7 @@ export function createMarkupFromErrors(code: string, lintErrors: LintError[]) {
     lintErrors.sort(errorComparator);
 
     const codeText = code.split("\n");
-    const errorLinesForCodeText: ErrorLine[][] = codeText.map(() => []);
+    const errorLinesForCodeText: ReadonlyArray<ErrorLine[]> = codeText.map(() => []);
 
     for (const error of lintErrors) {
         const {startPos, endPos, message} = error;
@@ -268,7 +268,7 @@ export function createMarkupFromErrors(code: string, lintErrors: LintError[]) {
 }
 /* tslint:enable:object-literal-sort-keys */
 
-function createCodeLineNoToErrorsMap(lines: Line[]) {
+function createCodeLineNoToErrorsMap(lines: ReadonlyArray<Line>) {
     const errorLinesForCodeLine: ErrorLine[][] = [];
     for (const line of lines) {
         if (line instanceof CodeLine) {
@@ -280,7 +280,7 @@ function createCodeLineNoToErrorsMap(lines: Line[]) {
     return errorLinesForCodeLine;
 }
 
-function isValidErrorMarkupContinuation(errorLinesForCodeLines: ErrorLine[][], lineNo: number) {
+function isValidErrorMarkupContinuation(errorLinesForCodeLines: ReadonlyArray<ReadonlyArray<ErrorLine>>, lineNo: number) {
     return lineNo < errorLinesForCodeLines.length
         && errorLinesForCodeLines[lineNo].length !== 0
         && errorLinesForCodeLines[lineNo][0].startCol === 0;

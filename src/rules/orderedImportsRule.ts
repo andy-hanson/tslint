@@ -164,7 +164,7 @@ interface JsonOptions {
     "module-source-path"?: string;
 }
 
-function parseOptions(ruleArguments: any[]): Options {
+function parseOptions(ruleArguments: ReadonlyArray<any>): Options {
     const optionSet = (ruleArguments as JsonOptions[])[0];
     const {
         "grouped-imports": isGrouped = false,
@@ -337,7 +337,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         return replacements;
     }
 
-    private getReplacementsForExistingImports(importDeclarationsList: ImportDeclaration[][]): Lint.Replacement[] {
+    private getReplacementsForExistingImports(importDeclarationsList: ReadonlyArray<ReadonlyArray<ImportDeclaration>>): Lint.Replacement[] {
         return importDeclarationsList.map((items, index) => {
             let start = items[0].nodeStartOffset;
             if (index > 0) {

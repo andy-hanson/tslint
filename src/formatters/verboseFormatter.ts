@@ -30,7 +30,7 @@ export class Formatter extends AbstractFormatter {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public format(failures: RuleFailure[]): string {
+    public format(failures: ReadonlyArray<RuleFailure>): string {
         failures = this.sortFailures(failures);
         return `${this.mapToMessages(failures).join("\n")}\n`;
     }

@@ -44,7 +44,7 @@ const OPTION_MEMBER_VARIABLE_DECLARATION: Option = "member-variable-declaration"
 const OPTION_OBJECT_DESTRUCTURING: Option = "object-destructuring";
 const OPTION_ARRAY_DESTRUCTURING: Option = "array-destructuring";
 
-function parseOptions(ruleArguments: Option[]) {
+function parseOptions(ruleArguments: ReadonlyArray<Option>) {
     const options: Partial<Record<keyof Options, boolean>> = {};
     for (const arg of ruleArguments) {
         options[arg] = true;

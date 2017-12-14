@@ -79,7 +79,7 @@ interface Options {
     readonly checkParameters: boolean;
     readonly ignorePattern: RegExp | undefined;
 }
-function parseOptions(options: any[]): Options {
+function parseOptions(options: ReadonlyArray<any>): Options {
     const checkParameters = options.indexOf(OPTION_CHECK_PARAMETERS) !== -1;
 
     let ignorePattern: RegExp | undefined;

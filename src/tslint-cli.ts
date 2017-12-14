@@ -49,7 +49,7 @@ interface Option {
     readonly description: string; // Long, used for `--help`
 }
 
-const options: Option[] = [
+const options: ReadonlyArray<Option> = [
     {
         short: "c",
         name: "config",

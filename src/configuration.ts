@@ -172,7 +172,7 @@ export function findConfigurationPath(suppliedConfigFilePath: string | null, inp
  * Will try each filename in filenames before recursing to a parent directory.
  * This is case-insensitive, so it can find 'TsLiNt.JsOn' when searching for 'tslint.json'.
  */
-function findup(filenames: string[], directory: string): string | undefined {
+function findup(filenames: ReadonlyArray<string>, directory: string): string | undefined {
     while (true) {
         const res = findFile(directory);
         if (res !== undefined) {
@@ -516,7 +516,7 @@ export function parseConfigFile(configFile: RawConfigFile, configFileDir?: strin
 /**
  * Fills in default values for `IOption` properties and outputs an array of `IOption`
  */
-export function convertRuleOptions(ruleConfiguration: Map<string, Partial<IOptions>>): IOptions[] {
+export function convertRuleOptions(ruleConfiguration: Map<string, Partial<IOptions>>): ReadonlyArray<IOptions> {
     const output: IOptions[] = [];
     ruleConfiguration.forEach(({ ruleArguments, ruleSeverity }, ruleName) => {
         const options: IOptions = {

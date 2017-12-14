@@ -27,9 +27,9 @@ const moduleDirectory = path.dirname(module.filename);
 const CORE_RULES_DIRECTORY = path.resolve(moduleDirectory, ".", "rules");
 const cachedRules = new Map<string, RuleConstructor | "not-found">();
 
-export function loadRules(ruleOptionsList: IOptions[],
+export function loadRules(ruleOptionsList: ReadonlyArray<IOptions>,
                           rulesDirectories?: string | string[],
-                          isJs = false): IRule[] {
+                          isJs = false): ReadonlyArray<IRule> {
     const rules: IRule[] = [];
     const notFoundRules: string[] = [];
     const notAllowedInJsRules: string[] = [];
@@ -83,7 +83,7 @@ export function loadRules(ruleOptionsList: IOptions[],
     return rules;
 }
 
-export function findRule(name: string, rulesDirectories?: string | string[]): RuleConstructor | undefined {
+export function findRule(name: string, rulesDirectories?: string | string[]): RuleConstructor | undefined {//should be readonly input
     const camelizedName = transformName(name);
     // first check for core rules
     const Rule = loadCachedRule(CORE_RULES_DIRECTORY, camelizedName);

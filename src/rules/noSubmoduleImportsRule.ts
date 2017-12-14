@@ -58,7 +58,7 @@ function walk(ctx: Lint.WalkContext<string[]>) {
     }
 }
 
-function isWhitelisted(path: string, whitelist: string[]): boolean {
+function isWhitelisted(path: string, whitelist: ReadonlyArray<string>): boolean {
     for (const option of whitelist) {
         if (path === option || path.startsWith(`${option}/`)) {
             return true;

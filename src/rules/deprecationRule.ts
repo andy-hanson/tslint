@@ -163,7 +163,7 @@ function getDeprecation(node: ts.Identifier, tc: ts.TypeChecker): string | undef
     return getSymbolDeprecation(symbol);
 }
 
-function findDeprecationTag(tags: ts.JSDocTagInfo[]): string | undefined {
+function findDeprecationTag(tags: ReadonlyArray<ts.JSDocTagInfo>): string | undefined {
     for (const tag of tags) {
         if (tag.name === "deprecated") {
             return tag.text;
@@ -193,7 +193,7 @@ function getSignatureDeprecation(signature?: ts.Signature): string | undefined {
     return signature.declaration === undefined ? undefined : getDeprecationFromDeclaration(signature.declaration);
 }
 
-function getDeprecationFromDeclarations(declarations?: ts.Declaration[]): string | undefined {
+function getDeprecationFromDeclarations(declarations?: ReadonlyArray<ts.Declaration>): string | undefined {
     if (declarations === undefined) {
         return undefined;
     }
@@ -230,7 +230,7 @@ function getDeprecationFromDeclaration(declaration: ts.Node): string | undefined
     return undefined;
 }
 
-function isFunctionOrMethod(declarations?: ts.Declaration[]) {
+function isFunctionOrMethod(declarations?: ReadonlyArray<ts.Declaration>) {
     if (declarations === undefined || declarations.length === 0) {
         return false;
     }

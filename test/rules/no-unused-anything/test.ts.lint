@@ -1,4 +1,5 @@
-interface I { readonly x: string[] }
-function f({ x }: I) {
-    return x.map(s => s);
+function f(xs: string[]) {
+    let y: string[];
+    y = xs;
+    return y;
 }

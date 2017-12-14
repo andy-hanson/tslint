@@ -50,11 +50,10 @@ export class Formatter extends AbstractFormatter {
         let output: string[] = ["TAP version 13"];
 
         if (failures.length === 0) {
-            output = output.concat([
-                "1..0 # SKIP No failures",
-            ]);
+            output.push("1..0 # SKIP No failures");
         } else {
-            output = output.concat([`1..${failures.length}`]).concat(this.mapToMessages(failures));
+            output.push(`1..${failures.length}`);
+            output.push(...this.mapToMessages(failures));
         }
 
         return `${output.join("\n")}\n`;

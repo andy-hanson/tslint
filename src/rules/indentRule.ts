@@ -84,7 +84,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     }
 }
 
-function parseOptions(ruleArguments: any[]): Options | undefined {
+function parseOptions(ruleArguments: ReadonlyArray<any>): Options | undefined {
     const type = ruleArguments[0] as string;
     if (type !== OPTION_USE_TABS && type !== OPTION_USE_SPACES) { return undefined; }
 

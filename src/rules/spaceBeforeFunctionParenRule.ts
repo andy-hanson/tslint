@@ -67,7 +67,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 type OptionName = "anonymous" | "asyncArrow" | "constructor" | "method" | "named";
-const optionNames: OptionName[] = ["anonymous", "asyncArrow", "constructor", "method", "named"];
+const optionNames: ReadonlyArray<OptionName> = ["anonymous", "asyncArrow", "constructor", "method", "named"];
 type Option = "always" | "never";
 type Options = Partial<Record<OptionName, Option>>;
 

@@ -155,8 +155,8 @@ export interface ReplacementJson {
     readonly innerText: string;
 }
 export class Replacement {
-    public static applyFixes(content: string, fixes: Fix[]): string {
-        return this.applyAll(content, flatMap(fixes, arrayify));
+    public static applyFixes(content: string, fixes: ReadonlyArray<Fix>): string {
+        return this.applyAll(content, flatMap<Fix, Replacement>(fixes, arrayify));
     }
 
     public static applyAll(content: string, replacements: Replacement[]) {

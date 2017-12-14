@@ -38,7 +38,7 @@ export class Formatter extends AbstractFormatter {
     };
     /* tslint:enable:object-literal-sort-keys */
 
-    public format(failures: RuleFailure[]): string {
+    public format(failures: ReadonlyArray<RuleFailure>): string {
         failures = this.sortFailures(failures);
         const outputLines = this.mapToMessages(failures);
 
@@ -50,7 +50,7 @@ export class Formatter extends AbstractFormatter {
         return `${outputLines.join("\n")}\n`;
     }
 
-    private mapToMessages(failures: RuleFailure[]): string[] {
+    private mapToMessages(failures: ReadonlyArray<RuleFailure>): string[] {
         if (failures.length === 0) {
             return [];
         }
@@ -102,7 +102,7 @@ export class Formatter extends AbstractFormatter {
         return (str + padder).substring(0, padder.length);
     }
 
-    private getPositionMaxSize(failures: RuleFailure[]): number {
+    private getPositionMaxSize(failures: ReadonlyArray<RuleFailure>): number {
         let positionMaxSize = 0;
 
         for (const failure of failures) {
@@ -118,7 +118,7 @@ export class Formatter extends AbstractFormatter {
         return positionMaxSize;
     }
 
-    private getRuleMaxSize(failures: RuleFailure[]): number {
+    private getRuleMaxSize(failures: ReadonlyArray<RuleFailure>): number {
         let ruleMaxSize = 0;
 
         for (const failure of failures) {

@@ -114,7 +114,7 @@ function walk(ctx: Lint.WalkContext<void>): void {
         }));
     }
 
-    function addFailures(failures: Failure[]): void {
+    function addFailures(failures: ReadonlyArray<Failure>): void {
         for (const failure of failures) {
             const { unify, only2 } = failure;
             switch (unify.kind) {
@@ -162,7 +162,7 @@ type Unify =
 function checkOverloads<T>(
         signatures: ReadonlyArray<T>,
         typeParameters: ReadonlyArray<ts.TypeParameterDeclaration> | undefined,
-        getOverload: GetOverload<T>): Failure[] {
+        getOverload: GetOverload<T>): ReadonlyArray<Failure> {
     const result: Failure[] = [];
     const isTypeParameter = getIsTypeParameter(typeParameters);
     for (const overloads of collectOverloads(signatures, getOverload)) {
@@ -300,7 +300,7 @@ function signatureUsesTypeParameter(sig: ts.SignatureDeclaration, isTypeParamete
  * Given all signatures, collects an array of arrays of signatures which are all overloads.
  * Does not rely on overloads being adjacent. This is similar to code in adjacentOverloadSignaturesRule.ts, but not the same.
  */
-function collectOverloads<T>(nodes: ReadonlyArray<T>, getOverload: GetOverload<T>): ts.SignatureDeclaration[][] {
+function collectOverloads<T>(nodes: ReadonlyArray<T>, getOverload: GetOverload<T>): ReadonlyArray<ReadonlyArray<ts.SignatureDeclaration>> {
     const map = new Map<string, ts.SignatureDeclaration[]>();
     for (const sig of nodes) {
         const overload = getOverload(sig);

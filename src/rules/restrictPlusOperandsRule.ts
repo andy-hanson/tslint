@@ -74,6 +74,6 @@ function getBaseTypeOfLiteralType(type: ts.Type): "string" | "number" | "invalid
     return "invalid";
 }
 
-function allSame(array: string[]) {
+function allSame(array: ReadonlyArray<string>) {
     return array.every((value) => value === array[0]);
 }

@@ -334,7 +334,7 @@ class NoShadowedVariableWalker extends Lint.AbstractWalker<Options> {
     }
 }
 
-function addToList(map: Map<string, ts.Identifier[]>, name: string, variables: VariableInfo[]) {
+function addToList(map: Map<string, ts.Identifier[]>, name: string, variables: ReadonlyArray<VariableInfo>) {
     let list = map.get(name);
     if (list === undefined) {
         list = [];

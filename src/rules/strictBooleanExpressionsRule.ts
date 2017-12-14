@@ -387,7 +387,7 @@ function binaryBooleanExpressionKind(node: ts.BinaryExpression): "&&" | "||" | u
     }
 }
 
-function stringOr(parts: string[]): string {
+function stringOr(parts: ReadonlyArray<string>): string {
     switch (parts.length) {
         case 1:
             return parts[0];
@@ -434,7 +434,7 @@ function showFailure(location: Location, ty: TypeFailure, unionType: boolean, op
     return `This type is not allowed in the ${showLocation(location)} because it ${tyFail}. ${expected}.`;
 }
 
-function showExpectedTypes(options: Options): string[] {
+function showExpectedTypes(options: Options): ReadonlyArray<string> {
     const parts = ["boolean"];
     if (options.allowNullUnion) { parts.push("null-union"); }
     if (options.allowUndefinedUnion) { parts.push("undefined-union"); }

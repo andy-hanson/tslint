@@ -29,7 +29,7 @@ const testRulesDir = "test/rules";
 
 describe("Rule Loader", () => {
     it("loads core rules", () => {
-        const validConfiguration: IOptions[] = [
+        const validConfiguration: ReadonlyArray<IOptions> = [
             { ruleName: "class-name", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "eofline", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "forin", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
@@ -42,7 +42,7 @@ describe("Rule Loader", () => {
     });
 
     it("ignores off rules", () => {
-        const validConfiguration: IOptions[] = [
+        const validConfiguration: ReadonlyArray<IOptions> = [
             { ruleName: "forin", ruleArguments: [], ruleSeverity: "off", disabledIntervals: [] },
         ];
         const rules = loadRules(validConfiguration, builtRulesDir);
@@ -50,7 +50,7 @@ describe("Rule Loader", () => {
     });
 
     it("ignores invalid rules", () => {
-        const invalidConfiguration: IOptions[] = [
+        const invalidConfiguration: ReadonlyArray<IOptions> = [
             { ruleName: "class-name", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "invalidConfig1", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "invalidConfig2", ruleArguments: [], ruleSeverity: "off", disabledIntervals: [] },
@@ -61,7 +61,7 @@ describe("Rule Loader", () => {
     });
 
     it("properly sets rule severity with options", () => {
-        const withOptions: IOptions[] = [
+        const withOptions: ReadonlyArray<IOptions> = [
             { ruleName: "callable-types", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "max-line-length", ruleArguments: [140], ruleSeverity: "warning", disabledIntervals: [] },
         ];
@@ -73,7 +73,7 @@ describe("Rule Loader", () => {
     });
 
     it("works with rulesDirectory argument as an Array", () => {
-        const validConfiguration: IOptions[] = [
+        const validConfiguration: ReadonlyArray<IOptions> = [
             { ruleName: "class-name", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "eofline", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "forin", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
@@ -86,7 +86,7 @@ describe("Rule Loader", () => {
     });
 
     it("loads js rules", () => {
-        const validConfiguration: IOptions[] = [
+        const validConfiguration: ReadonlyArray<IOptions> = [
             { ruleName: "class-name", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
             { ruleName: "await-promise", ruleArguments: [], ruleSeverity: "error", disabledIntervals: [] },
         ];

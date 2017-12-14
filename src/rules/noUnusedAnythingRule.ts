@@ -154,18 +154,7 @@ class Walker extends Lint.AbstractWalker<Options> {
                 this.addFailureAtNode(node, "Element is created/written to but never read")
             }
 
-            //If it's an array, check use
-            //todo: map and set too
-            //todo: unions too
-            //todo: would like a type checker api...
-            //const actualType = this.checker.getTypeAtLocation(node.name);
-            //if (this.checker.typeToString(actualType).endsWith("[]")) {
-            const typeNode = getTypeNode(node);
-            if (typeNode && containsMutableArrayType(typeNode)) {//todo: also array<>
-                if (!this.info.symbolToTypeIsMutated.has(sym)) {
-                    this.addFailureAtNode(node.name, "Could be readonly bro");
-                }
-            }
+            this.handleTypeUse(node, sym);
         }
     }
 
@@ -197,6 +186,23 @@ class Walker extends Lint.AbstractWalker<Options> {
                     this.addFailureAtNode(p, "Property is read but never created or written to.")
                 }
             }
+
+            this.handleTypeUse(p, sym);
+        }
+    }
+
+    private handleTypeUse(node: Tested | PropertyDeclarationLike, symbol: ts.Symbol) {
+        //If it's an array, check use
+        //todo: map and set too
+        //todo: unions too
+        //todo: would like a type checker api...
+        //const actualType = this.checker.getTypeAtLocation(node.name);
+        //if (this.checker.typeToString(actualType).endsWith("[]")) {
+        const typeNode = getTypeNode(node);
+        if (typeNode && containsMutableArrayType(typeNode)) {//todo: also array<>
+            if (!this.info.symbolToTypeIsMutated.has(symbol)) {
+                this.addFailureAtNode(node.name, "Could be readonly bro");
+            }
         }
     }
 }
@@ -206,14 +212,24 @@ function containsMutableArrayType(node: ts.TypeNode): boolean {
 }
 
 //test: that we handle unions
-function getTypeNode(node: Tested): ts.TypeNode | undefined {
-    return ts.isVariableDeclaration(node)
+function getTypeNode(node: Tested | PropertyDeclarationLike): ts.TypeNode | undefined {
+    switch (node.kind) {
+        case ts.SyntaxKind.Parameter:
         //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
-        || ts.isParameter(node) && node.dotDotDotToken === undefined
-        || ts.isPropertyDeclaration(node)
-        ? node.type
-        //TODO: also getter, setter
-        : ts.isMethodDeclaration(node) || ts.isFunctionDeclaration(node) ? node.type : undefined;
+            return (node as ts.ParameterDeclaration).dotDotDotToken === undefined ? (node as ts.ParameterDeclaration).type : undefined;
+        case ts.SyntaxKind.VariableDeclaration:
+        case ts.SyntaxKind.PropertyDeclaration:
+        case ts.SyntaxKind.MethodDeclaration:
+        case ts.SyntaxKind.MethodSignature:
+        case ts.SyntaxKind.FunctionDeclaration:
+        case ts.SyntaxKind.PropertyDeclaration:
+        case ts.SyntaxKind.PropertySignature:
+        case ts.SyntaxKind.GetAccessor:
+        case ts.SyntaxKind.SetAccessor:
+            return (node as ts.VariableDeclaration | ts.PropertyDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.FunctionDeclaration | ts.PropertyDeclaration | ts.PropertySignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration).type;
+        default:
+            throw new Error(`TODO: handle ${ts.SyntaxKind[node.kind]}`)
+    }
 }
 
 //name
@@ -364,28 +380,40 @@ class Foo {
     }
 
     private fff(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
-        sym = skipTransient(skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(sym, this.checker)); //name
+        const symbol = skipTransient(sym);
+
+//function skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol { //name
+//    const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, checker);
+//    return xx === undefined ? symbol : xx;
+//}
+        const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
+        if (xx) {
+            this.trackUseOfEachRootSymbol(node, symbol, currentClass);
+            this.trackUseOfEachRootSymbol(node, xx, currentClass);
+            return;
+        }
+
         const o = getContainingObjectLiteralElement(node);
         if (o) {
             for (const x of getPropertySymbolsFromContextualType(o, this.checker)) {
-                this.xxx(node, x, currentClass);
+                this.trackUseOfEachRootSymbol(node, x, currentClass);
             }
             //we're doing this both for the property and for the value referenced by shorthand
             //test: function f(x) return { x };
             const parent = node.parent!;
             if (ts.isShorthandPropertyAssignment(parent)) {
                 const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
-                this.xxx(node, v, currentClass);
+                this.trackUseOfEachRootSymbol(node, v, currentClass);
             }
+            return;
         }
-        else {
-            this.xxx(node, sym, currentClass);
-        }
+
+        this.trackUseOfEachRootSymbol(node, symbol, currentClass);
     }
 
-    private xxx(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
-        for (const s of this.checker.getRootSymbols(symbol)) {
-            this.trackUse(node, s, currentClass);
+    private trackUseOfEachRootSymbol(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
+        for (const root of this.checker.getRootSymbols(symbol)) {
+            this.trackUse(node, root, currentClass);
         }
     }
 
@@ -445,39 +473,145 @@ function isPossiblyMutableUse(node: ts.Expression, checker: ts.TypeChecker, addA
     if (isTested(parent) && parent.name === node) {
         return false;
     }
-    if (ts.isPropertyAccessExpression(parent)) {
-        if (parent.name === node) {//prefer conditional
-            //x.y.z.array
-            return isPossiblyMutableUse(parent, checker, addAlias);
-        } else {
-            assert(parent.expression === node);
-            //Check that it's not a mutating method
-            return isMutatingMethodName(parent.name.text);
+    switch (parent.kind) {
+        case ts.SyntaxKind.AsExpression:
+        case ts.SyntaxKind.TypeAssertionExpression:
+        case ts.SyntaxKind.NonNullExpression:
+        case ts.SyntaxKind.ParenthesizedExpression:
+            return isPossiblyMutableUse(parent as ts.AsExpression | ts.TypeAssertion | ts.NonNullExpression | ts.ParenthesizedExpression, checker, addAlias);
+
+        case ts.SyntaxKind.PropertyAccessExpression: {
+            const { expression, name } = parent as ts.PropertyAccessExpression;
+            if (name === node) {//prefer conditional
+                //x.y.z.array
+                return isPossiblyMutableUse(parent as ts.PropertyAccessExpression, checker, addAlias);
+            } else {
+                assert(expression === node);
+                //Check that it's not a mutating method
+                return isMutatingMethodName(name.text);
+            }
         }
-    }
-    if (ts.isExpressionStatement(parent)) {
-        return false;
-    }
-    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
-        assert(parent.initializer === node);
-        addAlias(parent.name);
-        return false; //for now -- alias may be mutated
+        case ts.SyntaxKind.ExpressionStatement:
+        case ts.SyntaxKind.BindingElement:
+        case ts.SyntaxKind.ComputedPropertyName:
+        case ts.SyntaxKind.PrefixUnaryExpression:
+        case ts.SyntaxKind.PostfixUnaryExpression:
+        case ts.SyntaxKind.IfStatement:
+        case ts.SyntaxKind.AwaitExpression:
+        case ts.SyntaxKind.SpreadAssignment:
+        case ts.SyntaxKind.ForInStatement:
+        case ts.SyntaxKind.ForOfStatement:
+        case ts.SyntaxKind.ForStatement:
+        case ts.SyntaxKind.WhileStatement: //condition
+        case ts.SyntaxKind.DoStatement:
+        case ts.SyntaxKind.VoidExpression:
+        case ts.SyntaxKind.CaseClause:
+            return false;
+        case ts.SyntaxKind.VariableDeclaration: {
+            const { initializer, name } = parent as ts.VariableDeclaration;
+            if (ts.isIdentifier(name)) {
+                assert(initializer === node);
+                addAlias(name);
+                return false; //for now -- alias may be mutated though
+            }
+            return fromContext();
+        }
+
+        case ts.SyntaxKind.BinaryExpression: {
+            //note we are looking for mutations of the *value*, and *assigning* is ok.
+            //e.g. `let x: ReadonlyArray<number>; x = [];` is not a mutable use.
+            const { left, operatorToken } = parent as ts.BinaryExpression;
+            if (node === left || operatorToken.kind !== ts.SyntaxKind.EqualsToken) {
+                return false;
+            }
+            //Assigning to something -- check that we're assigning to a readonly thing
+            return fromContext();
+        }
+
+        //creations don't mutate obvs
+        case ts.SyntaxKind.PropertySignature:
+        case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.ModuleDeclaration:
+        case ts.SyntaxKind.TypeReference:
+        case ts.SyntaxKind.InterfaceDeclaration:
+        case ts.SyntaxKind.ExpressionWithTypeArguments:
+        case ts.SyntaxKind.ClassDeclaration:
+        case ts.SyntaxKind.ExportAssignment:
+        case ts.SyntaxKind.NamespaceExportDeclaration:
+        case ts.SyntaxKind.TypeParameter:
+        case ts.SyntaxKind.ExportSpecifier:
+        case ts.SyntaxKind.NamespaceImport:
+        case ts.SyntaxKind.TypeOfExpression:
+        case ts.SyntaxKind.TemplateSpan:
+        case ts.SyntaxKind.SpreadElement:
+        case ts.SyntaxKind.SwitchStatement: //the thing being switched on
+        case ts.SyntaxKind.EnumDeclaration:
+        case ts.SyntaxKind.ImportSpecifier:
+        case ts.SyntaxKind.ImportClause:
+        case ts.SyntaxKind.ImportEqualsDeclaration:
+        case ts.SyntaxKind.PropertyDeclaration:
+            return false;
+
+        //type uses don't mutate obvs
+        case ts.SyntaxKind.QualifiedName:
+        case ts.SyntaxKind.TypePredicate:
+        case ts.SyntaxKind.TypeQuery:
+            return false;
+
+        case ts.SyntaxKind.ElementAccessExpression: {
+            const { expression, argumentExpression } = parent as ts.ElementAccessExpression;
+            if (node === argumentExpression) {
+                return false;
+            }
+            assert(node === expression);
+            return propertyIsMutated(parent as ts.ElementAccessExpression);
+        }
+
+        case ts.SyntaxKind.ConditionalExpression:
+            return node !== (parent as ts.ConditionalExpression).condition && fromContext();
+
+        //these expressions may expose it mutably depending on the contextual type
+        case ts.SyntaxKind.ArrayLiteralExpression:
+        case ts.SyntaxKind.ReturnStatement:
+        case ts.SyntaxKind.NewExpression:
+        case ts.SyntaxKind.CallExpression:
+        case ts.SyntaxKind.ArrowFunction: //return value
+        case ts.SyntaxKind.Parameter: //initializer
+            return fromContext();
+
+        case ts.SyntaxKind.PropertyAssignment:
+        case ts.SyntaxKind.ShorthandPropertyAssignment:
+            return true;//TODO: only if the property being assigned is mutable type
+
+        case ts.SyntaxKind.ThrowStatement:
+            return true; //be pessimistic since we don't have typed exceptions
+
+        default:
+            throw new Error(`TODO: handle ${ts.SyntaxKind[parent.kind]}, ${parent.getText()}`)
     }
 
-    const contextualType = checker.getContextualType(node);
-    if (contextualType && checker.typeToString(contextualType).startsWith("Readonly")) {
-        return false;
+    //unclosure?
+    function fromContext(): boolean {
+        // In all other locations: if provided to a context with a readonly type, not a mutable use.
+        // `function f(): ReadonlyArray<number> { return x; }` uses `x` readonly, `funciton f(): number[]` does not.
+        const contextualType = checker.getContextualType(node);
+        //If no contextual type, be pessimistic
+        return !contextualType || !checker.typeToString(contextualType).startsWith("Readonly");
     }
-
-    return true; //todo: do better... If we pass it to a fn taking readonlyarray it's fine...
 }
+
+
+
+
 
 function isMutatingMethodName(name: string): boolean {
     switch (name) {
         case "pop":
         case "push":
         case "sort":
+        case "shift":
         case "splice":
+        case "unshift":
             return true;
         //todo...
         default:
@@ -537,7 +671,8 @@ class SymbolInfo {
     //todo: detect created-but-never-read
 
     everCreatedOrMutated(): boolean {
-        return hasAccessFlag(this.private, AccessFlags.Create | AccessFlags.Mutate) || hasAccessFlag(this.public, AccessFlags.Create | AccessFlags.Mutate);
+        return hasAccessFlag(this.private, AccessFlags.Create | AccessFlags.Mutate)
+            || hasAccessFlag(this.public, AccessFlags.Create | AccessFlags.Mutate);
     }
 
     everMutated(): boolean {
@@ -567,7 +702,14 @@ const enum AccessFlags {
     /** Creates it */
     Create = 2 ** 2,
 }
-function accessFlags(node: ts.Node, symbol: ts.Symbol): AccessFlags {
+
+function propertyIsMutated(node: ts.PropertyAccessExpression | ts.ElementAccessExpression): boolean {
+    return !!(accessFlags(node) & AccessFlags.Mutate);
+}
+
+//symbol optional so can call in an expression context - shorthandpropertyassignment won't occur in that case
+//TODO: make accessFlagsWorker that takes no symbol and two entry points
+function accessFlags(node: ts.Node, symbol?: ts.Symbol): AccessFlags {
     const parent = node.parent!;
     if (ts.isTypeElement(parent)) {
         return AccessFlags.None;
@@ -587,7 +729,9 @@ function accessFlags(node: ts.Node, symbol: ts.Symbol): AccessFlags {
             return (parent as ts.PropertyAssignment).name === node ? AccessFlags.Create : AccessFlags.Read;
         case ts.SyntaxKind.ShorthandPropertyAssignment:
             //If this is the property symbol, this creates it. Otherwise this is reading a local variable.
-            return symbol.flags & ts.SymbolFlags.Property ? AccessFlags.Create : AccessFlags.Read;
+            return symbol!.flags & ts.SymbolFlags.Property ? AccessFlags.Create : AccessFlags.Read;
+        case ts.SyntaxKind.BindingElement:
+            return symbol!.flags & ts.SymbolFlags.Property ? AccessFlags.Read : AccessFlags.Create;
         case ts.SyntaxKind.MethodDeclaration:
             return AccessFlags.Create;
         case ts.SyntaxKind.PostfixUnaryExpression:
@@ -612,7 +756,7 @@ function accessFlags(node: ts.Node, symbol: ts.Symbol): AccessFlags {
     function writeOrReadWrite(): AccessFlags { //name
         // If grandparent is not an ExpressionStatement, this is used as an expression in addition to having a side effect.
         const shouldRead = !parent.parent || parent!.parent!.kind !== ts.SyntaxKind.ExpressionStatement;
-        const flags = isInOwnConstructor(node, symbol) ? AccessFlags.Create : AccessFlags.Mutate;
+        const flags = symbol && isInOwnConstructor(node, symbol) ? AccessFlags.Create : AccessFlags.Mutate;
         return shouldRead ? flags | AccessFlags.Read : flags;
     }
 }
@@ -689,14 +833,13 @@ function isAssignmentOperator(token: ts.SyntaxKind): boolean {
     return token >= ts.SyntaxKind.FirstAssignment && token <= ts.SyntaxKind.LastAssignment;
 }
 
+//function skipThings(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol { //name
+//    return skipTransient(skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, checker));
+//}
 
 function skipTransient(symbol: ts.Symbol): ts.Symbol {
     //todo: we shouldn't get these coming out of `getSymbolAtLocation`...
     return isSymbolFlagSet(symbol, ts.SymbolFlags.Transient) ? (symbol as any).target || symbol : symbol;
-}
-function skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol { //name
-    const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, checker);
-    return xx === undefined ? symbol : xx;
 }
 
 
@@ -756,7 +899,7 @@ function isObjectLiteralElement(node: ts.Node): node is ts.ObjectLiteralElement 
     return false;
 }
 /** Gets all symbols for one property. Does not get symbols for every property. */
-function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, checker: ts.TypeChecker): ts.Symbol[] {
+function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, checker: ts.TypeChecker): ReadonlyArray<ts.Symbol> {
     const objectLiteral = <ts.ObjectLiteralExpression>node.parent; //todo: update typedef so don't need cast
     const contextualType = checker.getContextualType(objectLiteral);
     const name = getNameFromObjectLiteralElement(node);
