@@ -110,7 +110,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     }
 }
 
-function parseOptions(args: Array<string | string[] | OptionsInput>): Options {
+function parseOptions(args: ReadonlyArray<string | string[] | OptionsInput>): Options {
     const functions: FunctionBan[] = [];
     const methods: MethodBan[] = [];
     for (const arg of args) {

@@ -22,8 +22,7 @@ export abstract class AbstractFormatter implements IFormatter {
     public static metadata: IFormatterMetadata;
     public abstract format(failures: ReadonlyArray<RuleFailure>): string;
 
-    // tslint:disable-next-line no-unused-anything (public api)
-    protected sortFailures(failures: ReadonlyArray<RuleFailure>): RuleFailure[] {
+    protected sortFailures(failures: ReadonlyArray<RuleFailure>): ReadonlyArray<RuleFailure> {
         return failures.slice().sort(RuleFailure.compare);
     }
 }

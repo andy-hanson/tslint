@@ -73,7 +73,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 
 function walk(ctx: Lint.WalkContext<Options>) {
     const {options} = ctx;
-    let dependencies: Set<string> | undefined;
+    let dependencies: ReadonlySet<string> | undefined;
     for (const name of findImports(ctx.sourceFile, ImportKind.All)) {
         if (!ts.isExternalModuleNameRelative(name.text)) {
             const packageName = getPackageName(name.text);
@@ -110,7 +110,7 @@ interface PackageJson {
     readonly optionalDependencies?: Dependencies;
 }
 
-function getDependencies(fileName: string, options: Options): Set<string> {
+function getDependencies(fileName: string, options: Options): ReadonlySet<string> {
     const result = new Set<string>();
     const packageJsonPath = findPackageJson(path.resolve(path.dirname(fileName)));
     if (packageJsonPath !== undefined) {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// tslint:disable no-unused-anything (TODO: lots of errors in this file)
+// tslint:disable no-unused-anything prefer-readonly-collection-types (TODO: lots of errors in this file)
 
 import * as ts from "typescript";
 

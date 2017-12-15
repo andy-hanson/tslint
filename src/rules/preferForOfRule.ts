@@ -43,7 +43,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 
 function walk(ctx: Lint.WalkContext<void>): void {
     const { sourceFile } = ctx;
-    let variables: Map<ts.Identifier, utils.VariableInfo> | undefined;
+    let variables: ReadonlyMap<ts.Identifier, utils.VariableInfo> | undefined;
 
     return ts.forEachChild(sourceFile, function cb(node): void {
         if (utils.isForStatement(node)) {

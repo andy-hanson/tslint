@@ -312,7 +312,7 @@ export function extendConfigurationFile(targetConfig: IConfigurationFile,
         }
     }
 
-    function combineMaps(target: Map<string, Partial<IOptions>>, next: Map<string, Partial<IOptions>>) {
+    function combineMaps(target: ReadonlyMap<string, Partial<IOptions>>, next: ReadonlyMap<string, Partial<IOptions>>) {
         const combined = new Map<string, Partial<IOptions>>();
         target.forEach((options, ruleName) => {
             combined.set(ruleName, options);

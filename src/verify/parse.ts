@@ -180,7 +180,7 @@ export function parseErrorsFromMarkup(text: string): LintError[] {
  * - try to format the message when it looks like: name % ('substitution1' [, "substitution2" [, ...]])
  * - or return it unchanged
  */
-function substituteMessage(templates: Map<string, string>, message: string): string {
+function substituteMessage(templates: ReadonlyMap<string, string>, message: string): string {
     const substitution = templates.get(message);
     if (substitution !== undefined) {
         return substitution;
@@ -193,7 +193,7 @@ function substituteMessage(templates: Map<string, string>, message: string): str
  * Where `name` is the name of a message substitution that is used as template.
  * If `name` is not found in `templates`, `message` is returned unchanged.
  */
-function formatMessage(templates: Map<string, string>, message: string): string {
+function formatMessage(templates: ReadonlyMap<string, string>, message: string): string {
     const formatMatch = /^([-\w]+) % \((.+)\)$/.exec(message);
     if (formatMatch !== null) {
         const template = templates.get(formatMatch[1]);

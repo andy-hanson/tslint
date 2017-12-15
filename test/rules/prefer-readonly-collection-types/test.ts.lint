@@ -1,0 +1,10 @@
+const x: Set<number> = new Set();
+class C {
+    p: Set<number> = x;
+    m() {
+        this.p.add(1);
+    }
+}
+
+
+[0]: Could be readonly bro

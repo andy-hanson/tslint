@@ -5,6 +5,7 @@
   "rules": {
     "no-unused-anything": [true, {
       "ignoreNames": ["metadata"]
-    }]
+    }],
+    "prefer-readonly-collection-types": true
   }
 }

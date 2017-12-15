@@ -25,7 +25,7 @@ export abstract class Exclusion<TDescriptor extends ExclusionDescriptor> {
 
     public abstract excludes(node: ts.Node): boolean;
 
-    protected createSet<T extends All | string>(values?: T[]): Set<T> {
+    protected createSet<T extends All | string>(values?: ReadonlyArray<T>): ReadonlySet<T> {
         if (values === undefined || values.length === 0) {
             values = [ALL as T];
         }

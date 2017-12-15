@@ -1,0 +1,5 @@
+{
+    "rules": {
+      "prefer-readonly-collection-types": true
+    }
+  }

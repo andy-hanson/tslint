@@ -296,7 +296,7 @@ export class Rule extends Lint.Rules.TypedRule {
         return this.applyWithFunction(sourceFile, walk, exclusionsMap, program.getTypeChecker());
     }
 
-    private getExclusionsMap(ruleArguments: Array<DocType | IInputExclusionDescriptors>): ExclusionsMap {
+    private getExclusionsMap(ruleArguments: ReadonlyArray<DocType | IInputExclusionDescriptors>): ExclusionsMap {
         if (ruleArguments.length === 0) {
             ruleArguments = [Rule.defaultArguments];
         }

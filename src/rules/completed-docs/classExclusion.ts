@@ -24,13 +24,13 @@ import {
 import { Exclusion } from "./exclusion";
 
 export interface IClassExclusionDescriptor {
-    readonly locations?: Location[];
-    readonly privacies?: Privacy[];
+    readonly locations?: ReadonlyArray<Location>;
+    readonly privacies?: ReadonlyArray<Privacy>;
 }
 
 export class ClassExclusion extends Exclusion<IClassExclusionDescriptor> {
-    private readonly locations: Set<Location> = this.createSet(this.descriptor.locations); //should detect: this should be ReadonlySet
-    private readonly privacies: Set<Privacy> = this.createSet(this.descriptor.privacies);
+    private readonly locations = this.createSet(this.descriptor.locations); //should detect: this should be ReadonlySet
+    private readonly privacies = this.createSet(this.descriptor.privacies);
 
     public excludes(node: ts.Node) {
         return !(

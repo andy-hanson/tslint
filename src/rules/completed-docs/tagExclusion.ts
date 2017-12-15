@@ -70,7 +70,7 @@ export class TagExclusion extends Exclusion<ITagExclusionDescriptor> {
         return node;
     }
 
-    private parseTagsWithContents(nodeText: string | undefined): Array<[string, string]> {
+    private parseTagsWithContents(nodeText: string | undefined): ReadonlyArray<[string, string]> {
         if (nodeText === undefined) {
             return [];
         }

@@ -22,11 +22,11 @@ import { ALL, Visibility, VISIBILITY_EXPORTED, VISIBILITY_INTERNAL } from "../co
 import { Exclusion } from "./exclusion";
 
 export interface IBlockExclusionDescriptor {
-    readonly visibilities?: Visibility[];
+    readonly visibilities?: ReadonlyArray<Visibility>;
 }
 
 export class BlockExclusion extends Exclusion<IBlockExclusionDescriptor> {
-    private readonly visibilities: Set<Visibility> = this.createSet(this.descriptor.visibilities);
+    private readonly visibilities: ReadonlySet<Visibility> = this.createSet(this.descriptor.visibilities);
 
     public excludes(node: ts.Node) {
         if (this.visibilities.has(ALL)) {

@@ -121,7 +121,7 @@ export class Rule extends Lint.Rules.AbstractRule {
     }
 }
 
-function parseOptions(options: Array<string | IExceptionsObject>): Options {
+function parseOptions(options: ReadonlyArray<string | IExceptionsObject>): Options {
     return {
         case: options.indexOf(OPTION_LOWERCASE) !== -1
                 ? Case.Lower
