@@ -22,6 +22,7 @@ import { find } from "../utils";
 
 import { getInfo, isTested, AnalysisResult, Tested } from "./analysis";
 import { isOkToNotUse } from "./noUnusedAnythingRule";
+import { isSymbolFlagSet } from "tsutils"; //todo: import fix is using single quotes for some reason...
 
 //todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
@@ -75,13 +76,92 @@ function walk(ctx: Lint.WalkContext<void>, info: AnalysisResult, checker: ts.Typ
         //if (this.checker.typeToString(actualType).endsWith("[]")) {
         const typeNode = getTypeNode(node);
         const x = typeNode && getMutableCollectionType(typeNode);
-        if (x) {
-            const y = info.symbolInfos.get(symbol)!;
-            if (!y.everUsedAsMutableCollection()) {
-                ctx.addFailureAtNode(x.node, `Prefer Readonly${x.name}`);
+        if (!x) {
+            return;
+        }
+
+        const y = info.symbolInfos.get(symbol)!;
+        if (y.everUsedAsMutableCollection()) {
+            return;
+        }
+
+        //For a property: but this type might be assigned to another type, and that other type might have this property mutable (test)
+        //todo: also for method
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property) && isPropertyAssignedToMutableCollection(symbol, checker, info)) {
+            return;
+        }
+
+        ctx.addFailureAtNode(x.node, `Prefer Readonly${x.name}`);
+    }
+}
+
+//method in AnalysisResult
+function isPropertyAssignedToMutableCollection(symbol: ts.Symbol, checker: ts.TypeChecker, info: AnalysisResult): boolean {
+    const targets = info.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
+    if (!targets) {
+        return false;
+    }
+
+    for (const target of targets) {
+        const targetProperty = checker.getPropertyOfType(target, symbol.name);
+        if (targetProperty) {
+            //test
+            if (!allowsReadonlyCollectionType(checker.getDeclaredTypeOfSymbol(targetProperty))) {
+                return true;
             }
         }
     }
+
+    return false;
+}
+
+//mv to analysisresult class
+export function isPropertyAssignedIndirectly(symbol: ts.Symbol, checker: ts.TypeChecker, info: AnalysisResult): boolean {
+    //find things that are assigned to this type.
+    const sources = info.typeAssignmentsTargetToSource.get(getTypeContainingProperty(symbol, checker));
+    if (!sources) {
+        return false;
+    }
+
+    for (const source of sources) {//name
+        if (source.flags & ts.TypeFlags.Any) {
+            return true;
+        }
+        else {
+            const sourceProperty = checker.getPropertyOfType(source, symbol.name);
+            if (sourceProperty) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+export function getParentOfPropertySymbol(symbol: ts.Symbol): ts.Symbol {
+    return (symbol as any).parent;
+}
+
+//todo; better
+function getTypeContainingProperty(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Type {
+    const parentSymbol = (symbol as any).parent as ts.Symbol;
+    return checker.getTypeAtLocation(parentSymbol.declarations![0]);
+
+    /*for (const d of symbol.declarations!) {
+        if (ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) {
+            const parent = d.parent as ts.ClassDeclaration | ts.ClassExpression | ts.InterfaceDeclaration | ts.TypeLiteralNode;
+            switch (parent.kind) {
+                case ts.SyntaxKind.ClassDeclaration:
+                case ts.SyntaxKind.ClassExpression:
+                case ts.SyntaxKind.InterfaceDeclaration:
+                case ts.SyntaxKind.TypeLiteral:
+                    break;
+                default:
+                    throw new Error(); //!
+            }
+            checker.getSymbolAtLocation(ts.isTypeLiteralNode(parent) ? parent : parent.name);
+            checker.getTypeAtLocation(parent.name!);
+        }
+    }*/
 }
 
 const x = new Set(["Array", "Set", "Map"]);
@@ -97,6 +177,13 @@ function getMutableCollectionType(node: ts.TypeNode): { readonly node: ts.TypeNo
         return { node, name: node.typeName.text };
     }
     return undefined;
+}
+
+function allowsReadonlyCollectionType(type: ts.Type): boolean {
+    if (type.flags & ts.TypeFlags.Union) {//preferconditional
+        return (type as ts.UnionType).types.some(allowsReadonlyCollectionType);
+    }
+    return type.symbol !== undefined && type.symbol.name.startsWith("Readonly");
 }
 
 //test: that we handle unions

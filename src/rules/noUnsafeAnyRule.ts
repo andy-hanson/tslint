@@ -352,7 +352,7 @@ function isPropertyAny(node: ts.PropertyDeclaration, checker: ts.TypeChecker) {
     for (const base of checker.getBaseTypes(checker.getTypeAtLocation(node.parent!) as ts.InterfaceType)) {
         const prop = base.getProperty(node.name.text);
         if (prop !== undefined && prop.declarations !== undefined) {
-            return isAny(checker.getTypeOfSymbolAtLocation(prop, prop.declarations[0]));
+            return isAny(checker.getTypeOfSymbolAtLocation(prop, prop.declarations[0])); //todo in separate pr: use getdeclaredtypeofsymbol
         }
     }
     return true;

@@ -36,9 +36,9 @@ const FIXES_FILE_EXTENSION = ".fix";
 export interface TestOutput {
     readonly skipped: false;
     // tslint:disable-next-line no-unused-anything (TODO: use this!)
-    readonly errorsFromLinter: LintError[];
+    readonly errorsFromLinter: ReadonlyArray<LintError>;
     // tslint:disable-next-line no-unused-anything (TODO: use this!)
-    readonly errorsFromMarkup: LintError[];
+    readonly errorsFromMarkup: ReadonlyArray<LintError>;
     readonly fixesFromLinter: string;
     readonly fixesFromMarkup: string;
     readonly markupFromLinter: string;

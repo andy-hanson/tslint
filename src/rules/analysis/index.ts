@@ -81,6 +81,9 @@ export function isTested(node: ts.Node): node is Tested { //what does this mean?
 export interface AnalysisResult {
     readonly symbolInfos: ReadonlyMap<ts.Symbol, SymbolInfo>;
     readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>;
+    readonly typeAssignmentsSourceToTarget: ReadonlyMap</*from*/ ts.Type, /*to*/ ReadonlyArray<ts.Type>>;
+    readonly typeAssignmentsTargetToSource: ReadonlyMap</*to*/ ts.Type, /*from*/ ReadonlyArray<ts.Type>>;
+    readonly castedToTypes: ReadonlySet<ts.Symbol>;
 }
 
 class Analyzer {
@@ -88,6 +91,9 @@ class Analyzer {
     private readonly symbolInfos = new Map<ts.Symbol, SymbolInfo>(); //name
     private readonly enumMembers = new Map<ts.Symbol, EnumAccessFlags>();
     private readonly localVariableAliases = new Map<ts.Symbol, ts.Symbol[]>();
+    private readonly typeAssignmentsSourceToTarget = new Map</*from*/ ts.Type, /*to*/ ts.Type[]>();
+    private readonly typeAssignmentsTargetToSource = new Map</*to*/ ts.Type, /*from*/ ts.Type[]>();
+    private readonly castedToTypes = new Set<ts.Symbol>();
 
     finish(): AnalysisResult {
         //todo: repeat until no changes (test)
@@ -103,7 +109,13 @@ class Analyzer {
             }
         });
 
-        return { symbolInfos: this.symbolInfos, enumMembers: this.enumMembers };
+        return {
+            symbolInfos: this.symbolInfos,
+            enumMembers: this.enumMembers,
+            typeAssignmentsSourceToTarget: this.typeAssignmentsSourceToTarget,
+            typeAssignmentsTargetToSource: this.typeAssignmentsTargetToSource,
+            castedToTypes: this.castedToTypes
+        };
     }
 
     analyze(node: ts.Node, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
@@ -124,6 +136,11 @@ class Analyzer {
             case ts.SyntaxKind.ClassExpression:
                 node.forEachChild(child => this.analyze(child, currentFile, node as ts.ClassLikeDeclaration));
                 break;
+            case ts.SyntaxKind.TypeAssertionExpression:
+            case ts.SyntaxKind.AsExpression:
+            case ts.SyntaxKind.TypePredicate:
+                this.addCastToTypeNode((node as ts.AsExpression | ts.TypeAssertion | ts.TypePredicateNode).type);
+                //falls through
             default:
                 node.forEachChild(child => this.analyze(child, currentFile, currentClass));
         }
@@ -187,7 +204,9 @@ class Analyzer {
         }
 
         const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
-        const access = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
+        const access = accessFlags(node, symbol, this.checker,
+            aliasId => this.addAlias(aliasId, symbol),
+            (a, b) => this.addTypeAssignment(a, b));
         if (isPublicAccess(symbol, currentFile, currentClass)) {
             info.public |= access;
         } else {
@@ -200,6 +219,103 @@ class Analyzer {
         assert(!!aliasSym);
         multiMapAdd(this.localVariableAliases, symbol, aliasSym);
     }
+
+    private addTypeAssignment(to: ts.Type, from: ts.Type): void {//maybe inline
+
+        //console.log("addTypeAssignment", this.checker.typeToString(to), this.checker.typeToString(from));
+        //If 'to' is a union, we need to assign to parts.
+        if (to.flags & ts.TypeFlags.UnionOrIntersection) {
+            for (const t of (to as ts.UnionOrIntersectionType).types) {
+                this.addTypeAssignment(t, from);
+            }
+            return;
+        }
+
+        //also, if assigning A[] to B[], we are also assigning A to B.
+        //but I don't know how to do that...
+        if (isTypeReference(to) && isTypeReference(from)) {
+            //if (to.target === from.target) { //problem: if one is REadonlyARray and other is Array...
+                if (to.typeArguments && from.typeArguments && to.typeArguments.length === from.typeArguments.length ) {
+                    for (const [argA, argB] of zip(to.typeArguments, from.typeArguments!)) {
+                        this.addTypeAssignment(argA, argB); //uh, variance...
+                    }
+                }
+            //}
+        }
+
+        //should have a *set* of assignments, not an array (for perf)
+        multiMapAdd(this.typeAssignmentsSourceToTarget, from, to);
+        multiMapAdd(this.typeAssignmentsTargetToSource, to, from);
+    }
+
+    private addCastToTypeNode(node: ts.TypeNode): void {
+        //todo: just use isTypeReference()
+        if (ts.isTypeReferenceNode(node)) {
+            //also handle type arguments (e.g. cast to a T[] means a T is created via cast)
+            if (node.typeArguments) for (const t of node.typeArguments) {
+                this.addCastToTypeNode(t);
+            }
+        }
+        this.addCastToType(this.checker.getTypeAtLocation(node));
+    }
+
+    private addCastToType(type: ts.Type): void {
+        if (type.flags & ts.TypeFlags.UnionOrIntersection) {
+            //test -- for `type T = { a } & { b }` we treat both `a` and `b` as implicitly-created if there is a cast to `T`
+            for (const t of (type as ts.UnionOrIntersectionType).types) {
+                this.addCastToType(t);
+            }
+            return;
+        }
+
+        if (!type.symbol) {
+            return;
+        }
+
+        if (this.castedToTypes.has(type.symbol)) {
+            return;
+        }
+        this.castedToTypes.add(type.symbol);
+
+
+        //test: also casts to all of its property types
+        for (const prop of this.checker.getPropertiesOfType(type)) {
+            //this.addCastToType(this.checker.getDeclaredTypeOfSymbol(prop)) ought to work,
+            //but getDeclaredTypeOFSymbol returns 'any' for `readonly a: { readonly b: number}`
+            for (const d of prop.declarations!) {
+                if ((ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) && d.type) {
+                    this.addCastToTypeNode(d.type);
+                }
+            }
+        }
+
+        /*
+        if (ts.isTypeReferenceNode(t)) {
+            if (t.typeArguments) for (const arg of t.typeArguments) {
+                this.addCastToType(arg);
+            }
+            const sym = this.checker.getSymbolAtLocation(t.typeName)!;
+            assert(!!sym);
+            this.castedToTypes.add(sym);
+        } else {
+            t.forEachChild(child => {
+                if (ts.isTypeNode(child)) {
+                    this.addCastToType(child);
+                }
+            });
+        }*/
+    }
+}
+
+function* zip<T>(a: T[], b: T[]): IterableIterator<[T, T]> {
+    assert(a.length === b.length);
+    for (let i = 0; i < a.length; i++) {
+        yield [a[i], b[i]];
+    }
+}
+
+function isTypeReference(type: ts.Type): type is ts.TypeReference {
+    return !!(type.flags & ts.TypeFlags.Object) && !!((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Reference);
 }
 
 function isPublicAccess(symbol: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {

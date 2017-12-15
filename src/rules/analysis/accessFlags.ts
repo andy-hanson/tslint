@@ -67,11 +67,18 @@ export function accessFlags(
     symbol: ts.Symbol,
     checker: ts.TypeChecker,
     addAlias: (id: ts.Identifier) => void,
+    addTypeAssignment: (to: ts.Type, from: ts.Type) => void,
 ): AccessFlags {
-    return new AccessFlagsChecker(checker, addAlias).work(node, symbol, true);
+    return new AccessFlagsChecker(checker, addAlias, addTypeAssignment).work(node, symbol, true);
 }
 class AccessFlagsChecker {
-    constructor(private readonly checker: ts.TypeChecker, private readonly addAlias: (id: ts.Identifier) => void) {}
+    constructor(
+        private readonly checker: ts.TypeChecker,
+        //
+        private readonly addAlias: (id: ts.Identifier) => void,
+        //shouldn't be here because this is only called on identifiers, do in loop in index.ts
+        private readonly addTypeAssignment: (to: ts.Type, from: ts.Type) => void,
+    ) {}
 
     work(node: ts.Expression, symbol: ts.Symbol | undefined, shouldAddAlias: boolean): AccessFlags {
         const parent = node.parent!;
@@ -84,6 +91,7 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.TypeAssertionExpression:
             case ts.SyntaxKind.NonNullExpression:
             case ts.SyntaxKind.ParenthesizedExpression:
+                //use addtypeassignment here?
                 type T = ts.AsExpression | ts.TypeAssertion | ts.NonNullExpression | ts.ParenthesizedExpression;
                 return this.work(parent as T, symbol, shouldAddAlias);
 
@@ -143,8 +151,11 @@ class AccessFlagsChecker {
                 return AccessFlags.ReadReadonly;
 
             case ts.SyntaxKind.VariableDeclaration: {
-                const { initializer, name } = parent as ts.VariableDeclaration;
+                const { initializer, name, type } = parent as ts.VariableDeclaration;
                 if (node === name) {
+                    if (type && initializer) {
+                        this.addTypeAssignment(this.checker.getTypeFromTypeNode(type), this.checker.getTypeAtLocation(initializer));
+                    }
                     return AccessFlags.Create;
                 } else {
                     assert(node === initializer);
@@ -160,20 +171,27 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.BinaryExpression: {
                 //note we are looking for mutations of the *value*, and *assigning* is ok.
                 //e.g. `let x: ReadonlyArray<number>; x = [];` is not a mutable use.
-                const { left, operatorToken } = parent as ts.BinaryExpression;
-                return operatorToken.kind === ts.SyntaxKind.EqualsToken
-                    ? node === left ?
+                const { left, operatorToken, right } = parent as ts.BinaryExpression;
+                if (operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+                    if (node === left) {
+                        this.addTypeAssignment(
+                            this.checker.getTypeAtLocation(left),
+                            this.checker.getTypeAtLocation(right)); //test
                         // `x = ...` is a write.
-                        AccessFlags.Write
+                        return AccessFlags.Write;
+                    } else {
                         // `... = x` means we are assigning this to something else,
                         // and need the contextual type to know if it's used as a readonly collection.
                         // When assigning to an existing variable there should always be a contextual type, so no need to track an alias.
-                        : this.fromContext(node)
-                    : node === left && isAssignmentKind(operatorToken.kind)
+                        return this.fromContext(node)
+                    }
+                } else {
+                    return node === left && isAssignmentKind(operatorToken.kind)
                         // `x += ...` is treated as a write, and also as a read if it appears in another expression as in `f(x += 1)`.
                         ? writeOrReadWrite(node, symbol)
                         // `... += x` is a pure read.
                         : AccessFlags.ReadReadonly;
+                }
             }
 
             case ts.SyntaxKind.DeleteExpression:
@@ -223,8 +241,10 @@ class AccessFlagsChecker {
                 return AccessFlags.Create;
             //type uses don't mutate obvs
             case ts.SyntaxKind.QualifiedName:
-            case ts.SyntaxKind.TypePredicate:
             case ts.SyntaxKind.TypeQuery:
+                return AccessFlags.ReadReadonly;
+
+            case ts.SyntaxKind.TypePredicate://join
                 return AccessFlags.ReadReadonly;
 
             case ts.SyntaxKind.ElementAccessExpression: {
@@ -291,8 +311,12 @@ class AccessFlagsChecker {
         // In all other locations: if provided to a context with a readonly type, not a mutable use.
         // `function f(): ReadonlyArray<number> { return x; }` uses `x` readonly, `funciton f(): number[]` does not.
         const contextualType = this.checker.getContextualType(node); //uncast
-        // If there's no contextual type, be pessimistic.
-        return !contextualType || !this.checker.typeToString(contextualType).startsWith("Readonly")
+        if (!contextualType) {
+            // If there's no contextual type, be pessimistic.
+            return AccessFlags.ReadWithMutableType;
+        }
+        this.addTypeAssignment(/*to*/ contextualType, /*from*/ this.checker.getTypeAtLocation(node));
+        return !this.checker.typeToString(contextualType).startsWith("Readonly")
             ? AccessFlags.ReadWithMutableType
             : AccessFlags.ReadReadonly;
     }

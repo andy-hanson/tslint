@@ -1,6 +1,5 @@
 interface I {
-    x: number;
+    readonly a: { readonly b: number }
 }
-const x = 0;
-const _: I = { x };
-_.x;
+declare const o: {};
+(o as I).a.b;

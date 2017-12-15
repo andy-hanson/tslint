@@ -134,7 +134,7 @@ function getSwitchRange(modifier: Modifier, range: ts.TextRange, sourceFile: ts.
 
 type Modifier = "line" | "next-line" | undefined;
 interface DisableComment {
-    readonly rulesList: string[] | "all";
+    readonly rulesList: ReadonlyArray<string> | "all";
     readonly isEnabled: boolean;
     readonly modifier: Modifier;
 }
@@ -147,7 +147,7 @@ function parseComment(commentText: string): DisableComment | undefined {
     // remove everything matched by the previous regex to get only the specified rules
     // split at whitespaces
     // filter empty items coming from whitespaces at start, at end or empty list
-    let rulesList: string[] | "all" = splitOnSpaces(commentText.substr(match[0].length));
+    let rulesList: ReadonlyArray<string> | "all" = splitOnSpaces(commentText.substr(match[0].length));
     if (rulesList.length === 0 && match[3] === ":") {
         // nothing to do here: an explicit separator was specified but no rules to switch
         return undefined;
@@ -162,6 +162,6 @@ function parseComment(commentText: string): DisableComment | undefined {
     return { rulesList, isEnabled: match[1] === "enable", modifier: match[2] as Modifier };
 }
 
-function splitOnSpaces(str: string): string[] {
+function splitOnSpaces(str: string): ReadonlyArray<string> {
     return str.split(/\s+/).filter((s) => s !== "");
 }

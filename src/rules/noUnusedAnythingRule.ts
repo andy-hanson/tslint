@@ -23,6 +23,7 @@ import { getSymbolDeprecation } from './deprecationRule';
 
 import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
+import { getParentOfPropertySymbol, isPropertyAssignedIndirectly } from './preferReadonlyCollectionTypesRule';
 
 //todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
@@ -86,7 +87,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         sourceFile: ts.SourceFile,
         ruleName: string,
         options: Options,
-        private readonly info: AnalysisResult,
+        private readonly info: AnalysisResult,//name
         private readonly checker: ts.TypeChecker,
     ) {
         super(sourceFile, ruleName, options);
@@ -139,19 +140,19 @@ class Walker extends Lint.AbstractWalker<Options> {
         sourceFile.forEachChild(cb);
     }
 
-    private handleSymbol(node: Tested, sym: ts.Symbol): void {
-        if (isOkToNotUse(node, sym, this.checker, this.options.ignoreNames)) {
+    private handleSymbol(node: Tested, symbol: ts.Symbol): void {
+        if (isOkToNotUse(node, symbol, this.checker, this.options.ignoreNames)) {
             return;
         }
 
-        const info = this.info.symbolInfos.get(sym);
+        const info = this.info.symbolInfos.get(symbol);
         if (info === undefined) {
             this.addFailureAtNode(node, "UNUSED"); //test
             return;
         }
 
         if (!info.everUsedPublicly()) {
-            if (ts.isClassElement(node)) {
+            if (ts.isClassLike(node.parent!)) {
                 //todo: test that we handle completely unused abstract method
                 if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
                     this.addFailureAtNode(node, "Class element not used publicly.");
@@ -178,17 +179,29 @@ class Walker extends Lint.AbstractWalker<Options> {
             this.addFailureAtNode(node.name, ts.isVariableDeclaration(node) ? "Prefer const" : "Make readonly");
         }
 
-        if (!info.everCreatedOrWritten()) {
+        if (!info.everCreatedOrWritten()
+            && !this.isParentCastedTo(symbol)
+            && !isPropertyAssignedIndirectly(symbol, this.checker, this.info)) {
             this.addFailureAtNode(node.name, "This is read, but is never created or written to.");
         }
 
         //todo: test that we warn for something never used at all...
     }
+
+    private isParentCastedTo(symbol: ts.Symbol) {
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property)) {
+            const parent = getParentOfPropertySymbol(symbol);
+            if (this.info.castedToTypes.has(parent)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 //note: returns false for things that can't be made immutable (parameters, catch clause variables, methods)
 function isMutable(node: Tested): boolean {
-    if (ts.isPropertyDeclaration(node) || ts.isParameterPropertyDeclaration(node)) {
+    if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node) || ts.isParameterPropertyDeclaration(node)) {
         return !hasModifier(node.modifiers, ts.SyntaxKind.ReadonlyKeyword);
     } else if (ts.isVariableDeclaration(node)) {
         const parent = node.parent!;
