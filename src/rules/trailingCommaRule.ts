@@ -47,7 +47,7 @@ interface OptionsJson {
     readonly multiline: OptionsJsonValue;
     readonly singleline: OptionsJsonValue;
     readonly esSpecCompliant: boolean;
-};
+}
 function normalizeOptions(options: OptionsJson): Options {
     return { multiline: normalize(options.multiline), singleline: normalize(options.singleline), specCompliant: !!options.esSpecCompliant};
 

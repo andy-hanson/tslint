@@ -42,12 +42,12 @@ export interface Options {
     /**
      * Exclude globs from path expansion.
      */
-    readonly exclude: string[];
+    readonly exclude: ReadonlyArray<string>;
 
     /**
      * File paths to lint.
      */
-    readonly files: string[];
+    readonly files: ReadonlyArray<string>;
 
     /**
      * Whether to return status code 0 even if there are lint errors.
@@ -221,7 +221,12 @@ function filterFiles(files: ReadonlyArray<string>, patterns: ReadonlyArray<strin
     return files.filter((file) => include === matcher.some((pattern) => pattern.match(file)));
 }
 
-function resolveGlobs(files: ReadonlyArray<string>, ignore: ReadonlyArray<string>, outputAbsolutePaths: boolean | undefined, logger: Logger): ReadonlyArray<string> {
+function resolveGlobs(
+    files: ReadonlyArray<string>,
+    ignore: ReadonlyArray<string>,
+    outputAbsolutePaths: boolean | undefined,
+    logger: Logger,
+): ReadonlyArray<string> {
     const results = flatMap(
         files,
         (file) => glob.sync(trimSingleQuotes(file), { ignore, nodir: true }),
@@ -236,7 +241,12 @@ function resolveGlobs(files: ReadonlyArray<string>, ignore: ReadonlyArray<string
     return results.map((file) => outputAbsolutePaths ? path.resolve(cwd, file) : path.relative(cwd, file));
 }
 
-async function doLinting(options: Options, files: ReadonlyArray<string>, program: ts.Program | undefined, logger: Logger): Promise<LintResult> {
+async function doLinting(
+    options: Options,
+    files: ReadonlyArray<string>,
+    program: ts.Program | undefined,
+    logger: Logger,
+): Promise<LintResult> {
     const linter = new Linter(
         {
             fix: !!options.fix,

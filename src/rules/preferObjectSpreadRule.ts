@@ -44,7 +44,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     /* tslint:enable:object-literal-sort-keys */
 
     public static readonly FAILURE_STRING = "Use the object spread operator instead.";
-    public static readonly ASSIGNMENT_FAILURE_STRING = "'Object.assign' returns the first argument. Prefer object spread if you want a new object.";
+    public static readonly ASSIGNMENT_FAILURE_STRING =
+        "'Object.assign' returns the first argument. Prefer object spread if you want a new object.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);

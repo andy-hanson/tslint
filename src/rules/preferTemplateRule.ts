@@ -44,7 +44,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     /* tslint:enable:object-literal-sort-keys */
 
     public static readonly FAILURE_STRING = "Use a template literal instead of concatenating with a string literal.";
-    public static readonly FAILURE_STRING_MULTILINE = "Use a multiline template literal instead of concatenating string literals with newlines.";
+    public static readonly FAILURE_STRING_MULTILINE =
+        "Use a multiline template literal instead of concatenating string literals with newlines.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         if (sourceFile.isDeclarationFile) {

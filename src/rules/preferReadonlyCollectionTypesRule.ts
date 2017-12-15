@@ -18,10 +18,10 @@
 import * as ts from "typescript";
 
 import * as Lint from "..";
+import { find } from "../utils";
 
-import { isTested, PropertyDeclarationLike, Tested, Info, getInfo } from './analysis';
-import { isOkToNotUse } from './noUnusedAnythingRule';
-import { find } from '../utils';
+import { getInfo, isTested, AnalysisResult, Tested } from "./analysis";
+import { isOkToNotUse } from "./noUnusedAnythingRule";
 
 //todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
@@ -53,7 +53,7 @@ export class Rule extends Lint.Rules.TypedRule {
     }
 }
 
-function walk(ctx: Lint.WalkContext<void>, info: Info, checker: ts.TypeChecker): void {
+function walk(ctx: Lint.WalkContext<void>, info: AnalysisResult, checker: ts.TypeChecker): void {
     ctx.sourceFile.forEachChild(function cb(node) {
         if (isTested(node)) {
             foo(node);
@@ -76,7 +76,7 @@ function walk(ctx: Lint.WalkContext<void>, info: Info, checker: ts.TypeChecker):
         const typeNode = getTypeNode(node);
         const x = typeNode && getMutableCollectionType(typeNode);
         if (x) {
-            const y = info.properties.get(symbol)!;
+            const y = info.symbolInfos.get(symbol)!;
             if (!y.everUsedAsMutableCollection()) {
                 ctx.addFailureAtNode(x.node, `Prefer Readonly${x.name}`);
             }
@@ -100,7 +100,7 @@ function getMutableCollectionType(node: ts.TypeNode): { readonly node: ts.TypeNo
 }
 
 //test: that we handle unions
-function getTypeNode(node: Tested | PropertyDeclarationLike): ts.TypeNode | undefined {
+function getTypeNode(node: Tested): ts.TypeNode | undefined {
     switch (node.kind) {
         case ts.SyntaxKind.Parameter:
         //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
@@ -115,6 +115,10 @@ function getTypeNode(node: Tested | PropertyDeclarationLike): ts.TypeNode | unde
         case ts.SyntaxKind.GetAccessor:
         case ts.SyntaxKind.SetAccessor:
             return (node as ts.VariableDeclaration | ts.PropertyDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.FunctionDeclaration | ts.PropertyDeclaration | ts.PropertySignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration).type;
+        case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.EnumDeclaration:
+        case ts.SyntaxKind.InterfaceDeclaration:
+            return undefined;
         default:
             throw new Error(`TODO: handle ${ts.SyntaxKind[node.kind]}`)
     }

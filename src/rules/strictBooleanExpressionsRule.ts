@@ -288,6 +288,7 @@ function failureForKind(kind: TypeKind, isInUnion: boolean, options: Options): T
     }
 }
 
+//is unused externally...
 export type Location =
     | ts.PrefixUnaryExpression
     | ts.IfStatement
@@ -297,7 +298,7 @@ export type Location =
     | ts.ConditionalExpression
     | ts.BinaryExpression;
 
-export const enum TypeFailure {
+const enum TypeFailure {
     AlwaysTruthy,
     AlwaysFalsy,
     String,

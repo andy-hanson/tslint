@@ -21,7 +21,7 @@ import * as ts from "typescript";
 import * as Lint from "..";
 import { getSymbolDeprecation } from './deprecationRule';
 
-import { isTested, Tested, ElementOfClassOrInterface, Info, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
+import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
 
 //todo: warn for unused `export const`
@@ -86,7 +86,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         sourceFile: ts.SourceFile,
         ruleName: string,
         options: Options,
-        private readonly info: Info,
+        private readonly info: AnalysisResult,
         private readonly checker: ts.TypeChecker,
     ) {
         super(sourceFile, ruleName, options);
@@ -144,9 +144,9 @@ class Walker extends Lint.AbstractWalker<Options> {
             return;
         }
 
-        const info = this.info.properties.get(sym);
+        const info = this.info.symbolInfos.get(sym);
         if (info === undefined) {
-            this.addFailureAtNode(node, "UNUSED"); //!
+            this.addFailureAtNode(node, "UNUSED"); //test
             return;
         }
 
@@ -158,25 +158,28 @@ class Walker extends Lint.AbstractWalker<Options> {
                 }
             }
             else if (hasModifier(node.modifiers, ts.SyntaxKind.ExportKeyword)) {
-                this.addFailureAtNode(node, "No need to export");
+                //todo: a type may need to be exported due to being used by another exported thing -- must check its uses better
+                if (node.kind !== ts.SyntaxKind.TypeAliasDeclaration && node.kind !== ts.SyntaxKind.InterfaceDeclaration) {
+                    this.addFailureAtNode(node.name, "No need to export");
+                }
             }
             else {
-                this.addFailureAtNode(node, "Has no uses"); //ever happens?
+                this.addFailureAtNode(node.name, "Has no uses"); //ever happens?
             }
             return;
         }
 
         if (!info.everRead()) {
-            this.addFailureAtNode(node, "This is given a value, but the value is never read");
+            this.addFailureAtNode(node.name, "This is given a value, but the value is never read");
             return;
         }
 
         if (!info.everWritten() && isMutable(node)) {
-            this.addFailureAtNode(node, ts.isVariableDeclaration(node) ? "Prefer const" : "Make readonly");
+            this.addFailureAtNode(node.name, ts.isVariableDeclaration(node) ? "Prefer const" : "Make readonly");
         }
 
         if (!info.everCreatedOrWritten()) {
-            this.addFailureAtNode(node, "This is read, but is never created or written to.");
+            this.addFailureAtNode(node.name, "This is read, but is never created or written to.");
         }
 
         //todo: test that we warn for something never used at all...
@@ -195,22 +198,12 @@ function isMutable(node: Tested): boolean {
     }
 }
 
-function isTestedElement(node: Tested): node is ElementOfClassOrInterface {
-    switch (node.kind) {
-        case ts.SyntaxKind.VariableDeclaration:
-        case ts.SyntaxKind.Parameter:
-            return false;
-        default:
-            return true;
-    }
-}
-
 export function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
     return isAmbient(node)
         || isIgnored(node)
         || isDeprecated(node, symbol, checker)
         || isOverload(node, symbol, checker)
-        || isTestedElement(node) && isOverride(node, checker)
+        || isOverride(node, checker)
         || ignoreNames.has(node.name.text);
 }
 
@@ -236,18 +229,27 @@ function isOverload(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): b
     return !!x && x.declarations!.length !== 1;
 }
 
-//handle interface too
-function isDeprecated(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker) {
-    return getSymbolDeprecation(symbol) !== undefined
-        //or the class is deprecated (thus all the members are)
-        || isTestedElement(node) && node.parent.name && getSymbolDeprecation(checker.getSymbolAtLocation(node.parent.name)!) !== undefined;
+function isDeprecated(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+    if (isItDeprecated(symbol)) {
+        return true;
+    }
+    // If the class is deprecated, all of its methods are too.
+    const parent = node.parent!;
+    return (ts.isClassLike(parent) || ts.isInterfaceDeclaration(parent))
+        && parent.name !== undefined
+        && isItDeprecated(checker.getSymbolAtLocation(parent.name)!);
+}
+function isItDeprecated(symbol: ts.Symbol): boolean { //name
+    return getSymbolDeprecation(symbol) !== undefined;
 }
 
-function isOverride(node: ElementOfClassOrInterface, checker: ts.TypeChecker): boolean { //test
+function isOverride(node: Tested, checker: ts.TypeChecker): boolean { //test
     const name = node.name.text;
-    //const sym = checker.getSymbolAtLocation(node)!;
-    const { heritageClauses } = node.parent;
-    return heritageClauses !== undefined && heritageClauses.some(clause =>
+    const parent = node.parent!;
+    if (!ts.isClassLike(parent)) {
+        return false;
+    }
+    return parent.heritageClauses !== undefined && parent.heritageClauses.some(clause =>
         clause.types.some(typeNode =>
             checker.getPropertyOfType(checker.getTypeFromTypeNode(typeNode), name) !== undefined));
 }

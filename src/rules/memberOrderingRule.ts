@@ -400,8 +400,8 @@ function getOptionsJson(allOptions: ReadonlyArray<any>): { readonly order: Reado
 
     return { order: categoryFromOption(firstOption[OPTION_ORDER]), alphabetize: firstOption[OPTION_ALPHABETIZE] === true };
 }
-function categoryFromOption(orderOption: MemberCategoryJson[] | string): MemberCategoryJson[] {
-    if (Array.isArray(orderOption)) {
+function categoryFromOption(orderOption: ReadonlyArray<MemberCategoryJson> | string): ReadonlyArray<MemberCategoryJson> {
+    if (typeof orderOption !== "string") {
         return orderOption;
     }
 
@@ -416,8 +416,8 @@ function categoryFromOption(orderOption: MemberCategoryJson[] | string): MemberC
  * Convert from undocumented old-style options.
  * This is designed to mimic the old behavior and should be removed eventually.
  */
-function convertFromOldStyleOptions(options: ReadonlyArray<string>): MemberCategoryJson[] {
-    let categories: NameAndKinds[] = [{ name: "member", kinds: allMemberKindNames }];
+function convertFromOldStyleOptions(options: ReadonlyArray<string>): ReadonlyArray<MemberCategoryJson> {
+    let categories: ReadonlyArray<NameAndKinds> = [{ name: "member", kinds: allMemberKindNames }];
     if (hasOption("variables-before-functions")) {
         categories = splitOldStyleOptions(categories, (kind) => kind.includes("field"), "field", "method");
     }
@@ -434,8 +434,11 @@ function convertFromOldStyleOptions(options: ReadonlyArray<string>): MemberCateg
         return options.indexOf(x) !== -1;
     }
 }
-interface NameAndKinds { readonly name: string; readonly kinds: string[]; }
-function splitOldStyleOptions(categories: ReadonlyArray<NameAndKinds>, filter: (name: string) => boolean, a: string, b: string): NameAndKinds[] {
+interface NameAndKinds { readonly name: string; readonly kinds: ReadonlyArray<string>; }
+function splitOldStyleOptions(
+    categories: ReadonlyArray<NameAndKinds>,
+    filter: (name: string) => boolean, a: string, b: string,
+): ReadonlyArray<NameAndKinds> {
     const newCategories: NameAndKinds[]  = [];
     for (const cat of categories) {
         const yes = []; const no = [];

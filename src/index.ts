@@ -34,7 +34,7 @@ export * from "./language/utils";
 export * from "./language/walker";
 export * from "./language/formatter/formatter";
 
-// tslint:disable no-unused-anything
+// tslint:disable no-unused-anything prefer-readonly-collection-types (TODO)
 export interface LintResult {
     readonly errorCount: number;
     readonly warningCount: number;
@@ -43,7 +43,7 @@ export interface LintResult {
     readonly format: string | FormatterConstructor;
     readonly output: string;
 }
-// tslint:enable no-unused-anything
+// tslint:enable no-unused-anything prefer-readonly-collection-types
 
 export interface ILinterOptions {
     readonly fix: boolean;

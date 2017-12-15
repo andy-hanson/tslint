@@ -1,7 +1,8 @@
-function f(): number[] { return []; }
-function g() {
-    const x = f();
-    x.push;
-    return x;
+class C {
+    x: string[];
 }
-g;
+interface I {
+    x: string[];
+}
+const i: I = new C();
+i.x.push("");

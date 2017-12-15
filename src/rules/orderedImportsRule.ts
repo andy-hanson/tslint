@@ -158,7 +158,7 @@ interface Options {
 }
 
 interface JsonOptions {
-    "grouped-imports"?: boolean; //should catch this
+    "grouped-imports"?: boolean;
     "import-sources-order"?: string;
     "named-imports-order"?: string;
     "module-source-path"?: string;

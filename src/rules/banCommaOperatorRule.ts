@@ -55,7 +55,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     };
     /* tslint:enable:object-literal-sort-keys max-line-length */
 
-    public static readonly FAILURE_STRING = "Do not use comma operator here because it can be easily misunderstood or lead to unintended bugs.";
+    public static readonly FAILURE_STRING =
+        "Do not use comma operator here because it can be easily misunderstood or lead to unintended bugs.";
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk);

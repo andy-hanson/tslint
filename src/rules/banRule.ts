@@ -24,7 +24,7 @@ interface FunctionBan {
     readonly message?: string;
 }
 interface MethodBan extends FunctionBan {
-    readonly object: string[];
+    readonly object: ReadonlyArray<string>;
 }
 
 interface Options {

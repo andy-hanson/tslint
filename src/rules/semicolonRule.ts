@@ -119,10 +119,6 @@ abstract class SemicolonWalker extends Lint.AbstractWalker<Options> {
         }
     }
 
-    private reportUnnecessary(pos: number, noFix?: boolean) {
-        this.addFailure(pos - 1, pos, Rule.FAILURE_STRING_UNNECESSARY, noFix ? undefined : Lint.Replacement.deleteText(pos - 1, 1));
-    }
-
     protected checkSemicolonOrLineBreak(node: ts.Node) {
         if (this.sourceFile.text[node.end - 1] !== ";") {
             return;
@@ -173,6 +169,10 @@ abstract class SemicolonWalker extends Lint.AbstractWalker<Options> {
     }
 
     protected abstract checkPropertyDeclaration(node: ts.PropertyDeclaration): void;
+
+    private reportUnnecessary(pos: number, noFix?: boolean) {
+        this.addFailure(pos - 1, pos, Rule.FAILURE_STRING_UNNECESSARY, noFix ? undefined : Lint.Replacement.deleteText(pos - 1, 1));
+    }
 
     private checkEmptyStatement(node: ts.Node) {
         // An empty statement is only ever useful when it is the only statement inside a loop

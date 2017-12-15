@@ -36,7 +36,7 @@ export interface IConfigurationFile {
     /**
      * An array of config files whose rules are inherited by this config file.
      */
-    extends: string[];
+    extends: ReadonlyArray<string>;
 
     /**
      * Rules that are used to lint to JavaScript files.

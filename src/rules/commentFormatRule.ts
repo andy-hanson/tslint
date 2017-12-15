@@ -114,7 +114,8 @@ export class Rule extends Lint.Rules.AbstractRule {
     public static readonly UPPERCASE_FAILURE = "comment must start with uppercase letter";
     public static readonly LEADING_SPACE_FAILURE = "comment must start with a space";
     public static readonly IGNORE_WORDS_FAILURE_FACTORY = (words: ReadonlyArray<string>): string => ` or the word(s): ${words.join(", ")}`;
-    public static readonly IGNORE_PATTERN_FAILURE_FACTORY = (pattern: string): string => ` or its start must match the regex pattern "${pattern}"`;
+    public static readonly IGNORE_PATTERN_FAILURE_FACTORY = (pattern: string): string =>
+        ` or its start must match the regex pattern "${pattern}"`;
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         return this.applyWithFunction(sourceFile, walk, parseOptions(this.ruleArguments));

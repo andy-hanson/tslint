@@ -1,3 +1,6 @@
-let x = 0;
-x++;
-
+interface I {
+    x: number;
+}
+const x = 0;
+const _: I = { x };
+_.x;

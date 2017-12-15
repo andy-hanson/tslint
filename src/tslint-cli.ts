@@ -26,7 +26,7 @@ import { arrayify, dedent } from "./utils";
 
 interface Argv {
     readonly config?: string;
-    readonly exclude: string[];
+    readonly exclude: ReadonlyArray<string>;
     readonly fix?: boolean;
     readonly force?: boolean;
     readonly init?: boolean;

@@ -19,107 +19,113 @@ import assert = require("assert");
 import { hasModifier, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
 import * as ts from "typescript";
 
+import { getEqualsKind } from "../..";
 import { skipAlias } from "../noUnnecessaryQualifierRule";
-import { getEqualsKind } from '../..';
-import { SymbolInfo, accessFlags, AccessFlags } from './accessFlags';
+import { AccessFlags, accessFlags, SymbolInfo } from "./accessFlags";
+import { multiMapAdd } from '../../utils';
 
-const infoCache = new WeakMap<ts.Program, Info>();
-
-export function getInfo(program: ts.Program): Info {
+const infoCache = new WeakMap<ts.Program, AnalysisResult>();
+export function getInfo(program: ts.Program): AnalysisResult {
     return createIfNotSet(infoCache, program, () => getInfoWorker(program));
 }
 
-function getInfoWorker(program: ts.Program): Info {
-    const f = new Foo(program.getTypeChecker());
-    for (const sf of program.getSourceFiles()) {
-        f.analyze(sf);
+function getInfoWorker(program: ts.Program): AnalysisResult {
+    const analyzer = new Analyzer(program.getTypeChecker());
+    for (const file of program.getSourceFiles()) {
+        if (file.fileName.includes("lib")) continue;//kill
+        analyzer.analyze(file, file, undefined);
     }
-    return f.finish();
+    return analyzer.finish();
 }
 
-//name
-export type Tested =
+export type Tested = ts.NamedDeclaration & { readonly name: ts.Identifier };
+export function isTested(node: ts.Node): node is Tested {
+    switch (node.kind) {
+        case ts.SyntaxKind.PropertyDeclaration:
+        case ts.SyntaxKind.PropertySignature:
+        case ts.SyntaxKind.MethodSignature:
+        case ts.SyntaxKind.GetAccessor:
+        case ts.SyntaxKind.SetAccessor:
+        case ts.SyntaxKind.ModuleDeclaration:
+            type T = ts.PropertyDeclaration | ts.PropertySignature | ts.MethodSignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ModuleDeclaration;
+            return ts.isIdentifier((node as T).name);
+        case ts.SyntaxKind.MethodDeclaration:
+            const parent = node.parent!;
+            return !ts.isObjectLiteralExpression(parent) && ts.isIdentifier((node as ts.MethodDeclaration).name);
+        //test: we detect unused interface, enum, type
+        case ts.SyntaxKind.InterfaceDeclaration:
+        case ts.SyntaxKind.EnumDeclaration:
+        case ts.SyntaxKind.TypeAliasDeclaration:
+            return true;
+        case ts.SyntaxKind.FunctionDeclaration:
+            return (node as ts.FunctionDeclaration).name !== undefined;
+        case ts.SyntaxKind.VariableDeclaration:
+            return ts.isIdentifier((node as ts.VariableDeclaration).name);
+        default:
+            return false;
+    }
+}
+
+
+/*export type Tested =
     (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration | ts.FunctionDeclaration)
-    & { readonly name: ts.Identifier }; //tslint:disable-line no-unused-anything
+    & { readonly name: ts.Identifier }; // tslint:disable-line no-unused-anything (https://github.com/Microsoft/TypeScript/pull/20609)
 export function isTested(node: ts.Node): node is Tested { //what does this mean???
     return (isElementOfClassOrInterface(node)
         || ts.isVariableDeclaration(node)
         || ts.isParameter(node)
         || ts.isFunctionDeclaration(node))
         && node.name !== undefined && ts.isIdentifier(node.name);
-}
+}*/
 
-export interface Info {
-    readonly properties: ReadonlyMap<ts.Symbol, SymbolInfo>;
+export interface AnalysisResult {
+    readonly symbolInfos: ReadonlyMap<ts.Symbol, SymbolInfo>;
     readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>;
-    readonly interfaceIsDirectlyCreated: ReadonlySet<ts.Symbol>;
 }
 
-//name
-class Foo {
+class Analyzer {
     constructor(private readonly checker: ts.TypeChecker) {}
-    private readonly properties = new Map<ts.Symbol, SymbolInfo>(); //name
+    private readonly symbolInfos = new Map<ts.Symbol, SymbolInfo>(); //name
     private readonly enumMembers = new Map<ts.Symbol, EnumAccessFlags>();
-    private readonly interfaceIsDirectlyCreated = new Set<ts.Symbol>();
-    //private readonly symbolToTypeIsMutated = new Set<ts.Symbol>();
-    //tracks when a property or return is assigned to a local variable.
     private readonly localVariableAliases = new Map<ts.Symbol, ts.Symbol[]>();
 
-    finish(): Info {
-        //todo: repeat until no changes
+    finish(): AnalysisResult {
+        //todo: repeat until no changes (test)
         this.localVariableAliases.forEach((aliases, sym) => {
-            const originalInfo = this.properties.get(sym)!;
+            const originalInfo = this.symbolInfos.get(sym)!;
             for (const alias of aliases) {
                 //todo: might be a private alias...
-                const aliasInfo = this.properties.get(alias)!;
+                const aliasInfo = this.symbolInfos.get(alias)!;
                 if (aliasInfo.everUsedAsMutableCollection()) {//todo: public/private difference
                     originalInfo.private |= AccessFlags.ReadWithMutableType;
                     originalInfo.public |= AccessFlags.ReadWithMutableType;
                 }
-
-                //if (this.symbolToTypeIsMutated.has(alias)) {
-                //    this.symbolToTypeIsMutated.add(sym);
-                //}
             }
         });
 
-        return { properties: this.properties, enumMembers: this.enumMembers, interfaceIsDirectlyCreated: this.interfaceIsDirectlyCreated };
+        return { symbolInfos: this.symbolInfos, enumMembers: this.enumMembers };
     }
 
-    analyze(file: ts.SourceFile): void {
-        if (file.fileName.includes("lib")) return;//kill
-
-        const cb = (node: ts.Node, currentClass: ts.ClassLikeDeclaration | undefined) => {
-            switch (node.kind) {
-                case ts.SyntaxKind.Identifier: {
-                    const sym = this.checker.getSymbolAtLocation(node);
-                    if (sym) {
-                        this.trackSymbolUse(node as ts.Identifier, skipAlias(sym, this.checker), file, currentClass);
-                    }
-                    break;
-                }
-                case ts.SyntaxKind.ClassDeclaration:
-                case ts.SyntaxKind.ClassExpression:
-                    node.forEachChild(x => cb(x, node as ts.ClassLikeDeclaration));
-                    break;
-                case ts.SyntaxKind.ObjectLiteralExpression: {
-                    const type = this.checker.getContextualType(node as ts.ObjectLiteralExpression);
-                    if (type && type.symbol) {
-                        this.interfaceIsDirectlyCreated.add(type.symbol);
+    analyze(node: ts.Node, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
+        switch (node.kind) {
+            case ts.SyntaxKind.Identifier: {
+                const sym = this.checker.getSymbolAtLocation(node);
+                if (sym !== undefined) {
+                    const symbol = skipTransient(skipAlias(sym, this.checker));
+                    if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
+                        this.trackEnumMemberUse(node as ts.Identifier, symbol);
+                    } else {
+                        this.trackSymbolUse(node as ts.Identifier, symbol, currentFile, currentClass);
                     }
                 }
-                default:
-                    node.forEachChild(x => cb(x, currentClass));//name
+                break;
             }
-        };
-        cb(file, undefined);
-    }
-
-    private trackSymbolUse(node: ts.Identifier, symbol: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined): void {
-        if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
-            this.trackEnumMemberUse(node, symbol);
-        } else {
-            this.fff(node, symbol, currentFile, currentClass);
+            case ts.SyntaxKind.ClassDeclaration:
+            case ts.SyntaxKind.ClassExpression:
+                node.forEachChild(child => this.analyze(child, currentFile, node as ts.ClassLikeDeclaration));
+                break;
+            default:
+                node.forEachChild(child => this.analyze(child, currentFile, currentClass));
         }
     }
 
@@ -129,29 +135,31 @@ class Foo {
         this.enumMembers.set(symbol, flags | (prevFlags === undefined ? EnumAccessFlags.None : prevFlags));
     }
 
-    private fff(node: ts.Identifier, sym: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
-        const symbol = skipTransient(sym);
-
-        const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
-        if (xx) {
-            this.trackUseOfEachRootSymbol(node, symbol, currentFile, currentClass);
-            this.trackUseOfEachRootSymbol(node, xx, currentFile, currentClass);
-            return;
+    private trackSymbolUse(
+        node: ts.Identifier,
+        symbol: ts.Symbol,
+        currentFile: ts.SourceFile,
+        currentClass: ts.ClassLikeDeclaration | undefined,
+    ) {
+        const bindingSymbol = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
+        if (bindingSymbol !== undefined) {
+            this.trackUseOfEachRootSymbol(node, bindingSymbol, currentFile, currentClass);
         }
-
-        const o = getContainingObjectLiteralElement(node);
-        if (o) {
-            for (const x of getPropertySymbolsFromContextualType(o, this.checker)) {
-                this.trackUseOfEachRootSymbol(node, x, currentFile, currentClass);
+        else {
+            const objectLiteral = getContainingObjectLiteralElement(node);
+            if (objectLiteral !== undefined) {
+                for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(objectLiteral, this.checker)) {
+                    this.trackUseOfEachRootSymbol(node, assignedPropertySymbol, currentFile, currentClass);
+                }
+                //we're doing this both for the property and for the value referenced by shorthand
+                //test: function f(x) { return { x }; }
+                const parent = node.parent!;
+                if (ts.isShorthandPropertyAssignment(parent)) {
+                    const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
+                    this.trackUseOfEachRootSymbol(node, v, currentFile, currentClass);
+                }
+                return;
             }
-            //we're doing this both for the property and for the value referenced by shorthand
-            //test: function f(x) return { x };
-            const parent = node.parent!;
-            if (ts.isShorthandPropertyAssignment(parent)) {
-                const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
-                this.trackUseOfEachRootSymbol(node, v, currentFile, currentClass);
-            }
-            return;
         }
 
         this.trackUseOfEachRootSymbol(node, symbol, currentFile, currentClass);
@@ -173,21 +181,21 @@ class Foo {
         symbol: ts.Symbol,
         currentFile: ts.SourceFile,
         currentClass: ts.ClassLikeDeclaration | undefined,
-    ): void {//name
+    ): void {
         if (symbol.declarations === undefined) {
             return;
         }
 
-        const info = createIfNotSet(this.properties, symbol, () => new SymbolInfo()); //if not a property -- fine, whatever
-        const newFlags = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
+        const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
+        const access = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
         if (isPublicAccess(symbol, currentFile, currentClass)) {
-            info.public |= newFlags;
+            info.public |= access;
         } else {
-            info.private |= newFlags;
+            info.private |= access;
         }
     }
 
-    private addAlias(aliasId: ts.Identifier, symbol: ts.Symbol) {
+    private addAlias(aliasId: ts.Identifier, symbol: ts.Symbol): void {
         const aliasSym = this.checker.getSymbolAtLocation(aliasId)!;
         assert(!!aliasSym);
         multiMapAdd(this.localVariableAliases, symbol, aliasSym);
@@ -195,53 +203,26 @@ class Foo {
 }
 
 function isPublicAccess(symbol: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
-    //for property, use currentclass. For export, use currentFile. For all else, just return true (no public/private distinction)
-    for (const d of symbol.declarations!) {
-        if (hasModifier(d.modifiers, ts.SyntaxKind.ExportKeyword)) {
-            const parent = d.parent!;
+    for (const decl of symbol.declarations!) {
+        if (hasModifier(decl.modifiers, ts.SyntaxKind.ExportKeyword)) {
+            const parent = decl.parent!;
             if (ts.isSourceFile(parent)) {
                 return parent !== currentFile;
             }
         }
-        if (ts.isClassElement(d)) {
-            const cls = d.parent!;
-            if (ts.isClassLike(cls)) {
-                return cls !== currentClass;
+        if (ts.isClassElement(decl)) {
+            const declaringClass = decl.parent!;
+            if (ts.isClassLike(declaringClass)) {
+                return declaringClass !== currentClass;
             }
         }
     }
+    // For anything other than a class element or export, all uses are public.
     return true;
 }
 
-
-function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
-    const values = map.get(key);
-    if (values === undefined) {
-        map.set(key, [value]);
-    } else {
-        values.push(value);
-    }
-}
-
-//TODO: handle non-identifier
-export type ElementOfClassOrInterface =
-    // tslint:disable no-unused-anything (This is a TypeScript bug. See https://github.com/Microsoft/TypeScript/pull/20609)
-    (ts.ClassElement | ts.TypeElement) & {
-        readonly parent: ts.ClassLikeDeclaration | ts.InterfaceDeclaration;
-        readonly name: ts.Identifier;
-    };
-    // tslint:enable no-unused-anything
-function isElementOfClassOrInterface(node: ts.Node): node is ElementOfClassOrInterface {
-    return (ts.isClassElement(node) || ts.isTypeElement(node))
-        && node.name !== undefined
-        && ts.isIdentifier(node.name)
-        && (ts.isClassLike(node.parent!) || ts.isInterfaceDeclaration(node.parent!) || ts.isTypeLiteralNode(node.parent!));
-}
-
+//this is unused, why don't we catch it
 export type PropertyDeclarationLike = ts.PropertyDeclaration | ts.ParameterDeclaration | ts.PropertySignature;
-//function isPropertyDeclarationLike(node: ts.Node): node is PropertyDeclarationLike {
-//    return ts.isPropertyDeclaration(node) || ts.isPropertySignature(node) || ts.isParameterPropertyDeclaration(node);
-//}
 
 function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: () => V): V {
     const already = map.get(key); //name
