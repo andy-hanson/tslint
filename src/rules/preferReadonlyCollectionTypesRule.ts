@@ -63,7 +63,7 @@ function walk(ctx: Lint.WalkContext<void>, info: Info, checker: ts.TypeChecker):
 
     function foo(node: Tested): void {//name
         const symbol = checker.getSymbolAtLocation(node.name)!;
-        if (isOkToNotUse(node, symbol, checker)) {
+        if (isOkToNotUse(node, symbol, checker, new Set())) { //todo: ignorenames
             return;
         }
 

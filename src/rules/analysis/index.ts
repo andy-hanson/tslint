@@ -16,7 +16,7 @@
  */
 
 import assert = require("assert");
-import { isSymbolFlagSet, isTypeFlagSet } from "tsutils";
+import { hasModifier, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
 import * as ts from "typescript";
 
 import { skipAlias } from "../noUnnecessaryQualifierRule";
@@ -38,7 +38,9 @@ function getInfoWorker(program: ts.Program): Info {
 }
 
 //name
-export type Tested = (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration | ts.FunctionDeclaration) & { readonly name: ts.Identifier }; //tslint:disable-line no-unused-anything
+export type Tested =
+    (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration | ts.FunctionDeclaration)
+    & { readonly name: ts.Identifier }; //tslint:disable-line no-unused-anything
 export function isTested(node: ts.Node): node is Tested { //what does this mean???
     return (isElementOfClassOrInterface(node)
         || ts.isVariableDeclaration(node)
@@ -92,8 +94,7 @@ class Foo {
                 case ts.SyntaxKind.Identifier: {
                     const sym = this.checker.getSymbolAtLocation(node);
                     if (sym) {
-                        let sym2 = skipAlias(sym, this.checker);
-                        this.trackSymbolUse(node as ts.Identifier, sym2, currentClass);
+                        this.trackSymbolUse(node as ts.Identifier, skipAlias(sym, this.checker), file, currentClass);
                     }
                     break;
                 }
@@ -114,11 +115,11 @@ class Foo {
         cb(file, undefined);
     }
 
-    private trackSymbolUse(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {
+    private trackSymbolUse(node: ts.Identifier, symbol: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined): void {
         if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
             this.trackEnumMemberUse(node, symbol);
         } else {
-            this.fff(node, symbol, currentClass);
+            this.fff(node, symbol, currentFile, currentClass);
         }
     }
 
@@ -128,51 +129,61 @@ class Foo {
         this.enumMembers.set(symbol, flags | (prevFlags === undefined ? EnumAccessFlags.None : prevFlags));
     }
 
-    private fff(node: ts.Identifier, sym: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
+    private fff(node: ts.Identifier, sym: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
         const symbol = skipTransient(sym);
 
         const xx = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
         if (xx) {
-            this.trackUseOfEachRootSymbol(node, symbol, currentClass);
-            this.trackUseOfEachRootSymbol(node, xx, currentClass);
+            this.trackUseOfEachRootSymbol(node, symbol, currentFile, currentClass);
+            this.trackUseOfEachRootSymbol(node, xx, currentFile, currentClass);
             return;
         }
 
         const o = getContainingObjectLiteralElement(node);
         if (o) {
             for (const x of getPropertySymbolsFromContextualType(o, this.checker)) {
-                this.trackUseOfEachRootSymbol(node, x, currentClass);
+                this.trackUseOfEachRootSymbol(node, x, currentFile, currentClass);
             }
             //we're doing this both for the property and for the value referenced by shorthand
             //test: function f(x) return { x };
             const parent = node.parent!;
             if (ts.isShorthandPropertyAssignment(parent)) {
                 const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
-                this.trackUseOfEachRootSymbol(node, v, currentClass);
+                this.trackUseOfEachRootSymbol(node, v, currentFile, currentClass);
             }
             return;
         }
 
-        this.trackUseOfEachRootSymbol(node, symbol, currentClass);
+        this.trackUseOfEachRootSymbol(node, symbol, currentFile, currentClass);
     }
 
-    private trackUseOfEachRootSymbol(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined) {
+    private trackUseOfEachRootSymbol(
+        node: ts.Identifier,
+        symbol: ts.Symbol,
+        currentFile: ts.SourceFile,
+        currentClass: ts.ClassLikeDeclaration | undefined,
+    ) {
         for (const root of this.checker.getRootSymbols(symbol)) {
-            this.trackUse(node, root, currentClass);
+            this.trackUse(node, root, currentFile, currentClass);
         }
     }
 
-    private trackUse(node: ts.Identifier, symbol: ts.Symbol, currentClass: ts.ClassLikeDeclaration | undefined): void {//name
+    private trackUse(
+        node: ts.Identifier,
+        symbol: ts.Symbol,
+        currentFile: ts.SourceFile,
+        currentClass: ts.ClassLikeDeclaration | undefined,
+    ): void {//name
         if (symbol.declarations === undefined) {
             return;
         }
 
         const info = createIfNotSet(this.properties, symbol, () => new SymbolInfo()); //if not a property -- fine, whatever
         const newFlags = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
-        if (symbol.declarations.some(d => d.parent === currentClass)) {
-            info.private = info.private | newFlags;
+        if (isPublicAccess(symbol, currentFile, currentClass)) {
+            info.public |= newFlags;
         } else {
-            info.public = info.public | newFlags;
+            info.private |= newFlags;
         }
     }
 
@@ -182,6 +193,26 @@ class Foo {
         multiMapAdd(this.localVariableAliases, symbol, aliasSym);
     }
 }
+
+function isPublicAccess(symbol: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
+    //for property, use currentclass. For export, use currentFile. For all else, just return true (no public/private distinction)
+    for (const d of symbol.declarations!) {
+        if (hasModifier(d.modifiers, ts.SyntaxKind.ExportKeyword)) {
+            const parent = d.parent!;
+            if (ts.isSourceFile(parent)) {
+                return parent !== currentFile;
+            }
+        }
+        if (ts.isClassElement(d)) {
+            const cls = d.parent!;
+            if (ts.isClassLike(cls)) {
+                return cls !== currentClass;
+            }
+        }
+    }
+    return true;
+}
+
 
 function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
     const values = map.get(key);

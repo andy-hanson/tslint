@@ -47,7 +47,7 @@ export class Formatter extends AbstractFormatter {
     /* tslint:enable:object-literal-sort-keys */
 
     public format(failures: ReadonlyArray<RuleFailure>): string {
-        let output: string[] = ["TAP version 13"];
+        const output: string[] = ["TAP version 13"];
 
         if (failures.length === 0) {
             output.push("1..0 # SKIP No failures");

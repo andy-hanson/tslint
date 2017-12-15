@@ -25,7 +25,7 @@ export type NoInfer<T> = T & {[K in keyof T]: T[K]};
 export abstract class AbstractRule implements IRule {
     public static metadata: IRuleMetadata;
     protected readonly ruleArguments: any[];
-    protected readonly ruleSeverity: RuleSeverity;
+    protected readonly ruleSeverity: RuleSeverity; // tslint:disable-line no-unused-anything (TODO: could be private)
     public readonly ruleName: string;
 
     constructor(private readonly options: IOptions) {

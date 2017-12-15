@@ -15,15 +15,13 @@
  * limitations under the License.
  */
 
-import assert = require("assert");
-import { hasModifier, isSymbolFlagSet } from "tsutils";
+import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind } from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
 import { getSymbolDeprecation } from './deprecationRule';
 
-import { isTested, PropertyDeclarationLike, Tested, ElementOfClassOrInterface, Info, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
-import { AccessFlags } from './analysis/accessFlags';
+import { isTested, Tested, ElementOfClassOrInterface, Info, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
 
 //todo: warn for unused `export const`
@@ -97,22 +95,21 @@ class Walker extends Lint.AbstractWalker<Options> {
     public walk(sourceFile: ts.SourceFile): void {
         const cb = (node: ts.Node) => {
             switch (node.kind) {
-                case ts.SyntaxKind.PropertySignature:
-                case ts.SyntaxKind.PropertyDeclaration:
-                    this.handleProperty(node as ts.PropertyDeclaration | ts.PropertySignature);
-                    break;
+                //case ts.SyntaxKind.PropertySignature:
+                //case ts.SyntaxKind.PropertyDeclaration:
+                //    this.handleProperty(node as ts.PropertyDeclaration | ts.PropertySignature);
+                //    break;
                 case ts.SyntaxKind.Parameter: {
-                    const p = node as ts.ParameterDeclaration;
+                    const p = node as ts.ParameterDeclaration & { readonly name: ts.Identifier };
                     if (ts.isParameterPropertyDeclaration(node)) {
-                        this.handleProperty(p);
-                    } else {
-                        //TODO: for a signature, look into its implementers for uses
-                        if (!!(p.parent! as any).body //obs a parameter in a signature isn't "used"
-                            && ts.isIdentifier(p.name)
-                            && p.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { //todo: handle 'this'
-                            //tslint:disable-next-line no-unused-anything
-                            this.handleSymbol(p as ts.ParameterDeclaration & { readonly name: ts.Identifier });
-                        }
+                        this.handleSymbol(p, getThePropertySymbol(p, this.checker));
+                    }
+                    //TODO: for a signature, look into its implementers for uses
+                    else if (!!(p.parent! as any).body //obs a parameter in a signature isn't "used"
+                        && ts.isIdentifier(p.name)
+                        && p.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { //todo: handle 'this'
+                        //tslint:disable-next-line no-unused-anything
+                        this.handleSymbol(p, this.checker.getSymbolAtLocation(p.name)!);
                     }
                     break;
                 }
@@ -134,7 +131,7 @@ class Walker extends Lint.AbstractWalker<Options> {
                 }
                 default:
                     if (isTested(node)) {
-                        this.handleSymbol(node);
+                        this.handleSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
                     }
             }
             node.forEachChild(cb);
@@ -142,64 +139,61 @@ class Walker extends Lint.AbstractWalker<Options> {
         sourceFile.forEachChild(cb);
     }
 
-    private handleSymbol(node: Tested): void {
-        const sym = this.checker.getSymbolAtLocation(node.name)!;
-        assert(!!sym);
-
-        if (isOkToNotUse(node, sym, this.checker)) {
+    private handleSymbol(node: Tested, sym: ts.Symbol): void {
+        if (isOkToNotUse(node, sym, this.checker, this.options.ignoreNames)) {
             return;
         }
-
 
         const info = this.info.properties.get(sym);
         if (info === undefined) {
             this.addFailureAtNode(node, "UNUSED"); //!
-        }
-        else {
-            if (info.public === AccessFlags.None
-                //If abstract, it may only be used in this class, but still can't be private.
-                && !hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
-                this.addFailureAtNode(node, "Class element not used publicly.");
-            }
-
-            if (!info.everRead()) {
-                this.addFailureAtNode(node, "Element is created/written to but never read")
-            }
-        }
-    }
-
-    private handleProperty(p: PropertyDeclarationLike): void {
-        if (!ts.isIdentifier(p.name)) return;
-        if (this.options.ignoreNames.has(p.name.text)) { //test
             return;
         }
 
-        const sym = p.kind === ts.SyntaxKind.Parameter ? getThePropertySymbol(p, this.checker) : this.checker.getSymbolAtLocation(p.name)!;
-        assert(!!sym);
-
-        const x = this.info.properties.get(sym); //dup
-        if (x === undefined) {
-            this.addFailureAtNode(p, "Property is unused.");
-        }
-        else {
-            if (!x.everUsedPublicly() && !hasModifier(p.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.ProtectedKeyword)) {
-                this.addFailureAtNode(p, "Property can be made private.")
-            }
-            if (!x.everWritten() && !hasModifier(p.modifiers, ts.SyntaxKind.ReadonlyKeyword)) {
-                this.addFailureAtNode(p, "Property can be made readonly.");
-            }
-            if (!x.everRead()) {
-                this.addFailureAtNode(p, "Element is created/written to but never read") //dup
-            }
-            if (!x.everCreatedOrWritten()) {
-                if (this.info.interfaceIsDirectlyCreated.has((sym as any).parent)) { //!
-                    this.addFailureAtNode(p, "Property is read but never created or written to.")
+        if (!info.everUsedPublicly()) {
+            if (ts.isClassElement(node)) {
+                //todo: test that we handle completely unused abstract method
+                if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
+                    this.addFailureAtNode(node, "Class element not used publicly.");
                 }
             }
+            else if (hasModifier(node.modifiers, ts.SyntaxKind.ExportKeyword)) {
+                this.addFailureAtNode(node, "No need to export");
+            }
+            else {
+                this.addFailureAtNode(node, "Has no uses"); //ever happens?
+            }
+            return;
         }
+
+        if (!info.everRead()) {
+            this.addFailureAtNode(node, "This is given a value, but the value is never read");
+            return;
+        }
+
+        if (!info.everWritten() && isMutable(node)) {
+            this.addFailureAtNode(node, ts.isVariableDeclaration(node) ? "Prefer const" : "Make readonly");
+        }
+
+        if (!info.everCreatedOrWritten()) {
+            this.addFailureAtNode(node, "This is read, but is never created or written to.");
+        }
+
+        //todo: test that we warn for something never used at all...
     }
 }
 
+//note: returns false for things that can't be made immutable (parameters, catch clause variables, methods)
+function isMutable(node: Tested): boolean {
+    if (ts.isPropertyDeclaration(node) || ts.isParameterPropertyDeclaration(node)) {
+        return !hasModifier(node.modifiers, ts.SyntaxKind.ReadonlyKeyword);
+    } else if (ts.isVariableDeclaration(node)) {
+        const parent = node.parent!;
+        return parent.kind !== ts.SyntaxKind.CatchClause && getVariableDeclarationKind(parent) !== VariableDeclarationKind.Const;
+    } else {
+        return false;
+    }
+}
 
 function isTestedElement(node: Tested): node is ElementOfClassOrInterface {
     switch (node.kind) {
@@ -211,12 +205,13 @@ function isTestedElement(node: Tested): node is ElementOfClassOrInterface {
     }
 }
 
-export function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+export function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
     return isAmbient(node)
         || isIgnored(node)
         || isDeprecated(node, symbol, checker)
         || isOverload(node, symbol, checker)
-        || isTestedElement(node) && isOverride(node, checker);
+        || isTestedElement(node) && isOverride(node, checker)
+        || ignoreNames.has(node.name.text);
 }
 
 function isAmbient(node: Tested): boolean { //test

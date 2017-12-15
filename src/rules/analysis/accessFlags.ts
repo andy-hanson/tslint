@@ -105,11 +105,16 @@ function accessFlagsWorker(
             assert(node === (parent as ts.FunctionExpression).name);
             return AccessFlags.Create; //doesn't matter, we won't analyze this later anyway
 
+        case ts.SyntaxKind.PostfixUnaryExpression:
+        case ts.SyntaxKind.PrefixUnaryExpression:
+            const { operator } = parent as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression;
+            return operator === ts.SyntaxKind.PlusPlusToken || operator === ts.SyntaxKind.MinusMinusToken
+                ? writeOrReadWrite()
+                : AccessFlags.ReadReadonly;
+
         case ts.SyntaxKind.ExpressionStatement:
         case ts.SyntaxKind.BindingElement:
         case ts.SyntaxKind.ComputedPropertyName:
-        case ts.SyntaxKind.PrefixUnaryExpression:
-        case ts.SyntaxKind.PostfixUnaryExpression:
         case ts.SyntaxKind.IfStatement:
         case ts.SyntaxKind.AwaitExpression:
         case ts.SyntaxKind.SpreadAssignment:
@@ -143,6 +148,7 @@ function accessFlagsWorker(
             //note we are looking for mutations of the *value*, and *assigning* is ok.
             //e.g. `let x: ReadonlyArray<number>; x = [];` is not a mutable use.
             const { left, operatorToken } = parent as ts.BinaryExpression;
+            //conditionalexpression
             if (operatorToken.kind !== ts.SyntaxKind.EqualsToken) {
                 return node === left && isAssignmentOperator(operatorToken.kind) ? writeOrReadWrite() : AccessFlags.ReadReadonly;
             }
@@ -260,12 +266,6 @@ function accessFlagsWorker(
             return symbol!.flags & ts.SymbolFlags.Property ? AccessFlags.ReadReadonly : AccessFlags.Create;
         case ts.SyntaxKind.MethodDeclaration:
             return AccessFlags.Create;
-        case ts.SyntaxKind.PostfixUnaryExpression:
-        case ts.SyntaxKind.PrefixUnaryExpression:
-            const { operator } = parent as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression;
-            return operator === ts.SyntaxKind.PlusPlusToken || operator === ts.SyntaxKind.MinusMinusToken
-                ? writeOrReadWrite()
-                : AccessFlags.ReadReadonly;
 
         default:
             throw new Error(`TODO: handle ${ts.SyntaxKind[parent.kind]}, ${parent.getText()}, node: ${ts.SyntaxKind[node.kind]} ${node.getText()}`)

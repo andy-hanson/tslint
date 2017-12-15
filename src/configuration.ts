@@ -351,7 +351,7 @@ export function getRelativePath(directory?: string | null, relativeTo?: string) 
 
 // check if directory should be used as path or if it should be resolved like a module
 // matches if directory starts with '/', './', '../', 'node_modules/' or equals '.' or '..'
-export function useAsPath(directory: string) {
+function useAsPath(directory: string) {
     return /^(?:\.?\.?(?:\/|$)|node_modules\/)/.test(directory);
 }
 

@@ -214,6 +214,6 @@ function isTypedPropertyDeclaration(node: ts.Node): boolean {
     return utils.isPropertyDeclaration(node) && node.type !== undefined;
 }
 
-export function isNodeArray(nodeOrArray: ts.Node | ts.NodeArray<ts.Node>): nodeOrArray is ts.NodeArray<ts.Node> {
+function isNodeArray(nodeOrArray: ts.Node | ts.NodeArray<ts.Node>): nodeOrArray is ts.NodeArray<ts.Node> {
     return Array.isArray(nodeOrArray);
 }
