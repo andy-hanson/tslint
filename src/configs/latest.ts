@@ -17,6 +17,7 @@
 
 // tslint:disable object-literal-sort-keys
 // tslint:disable:object-literal-key-quotes
+// tslint:disable-next-line no-unused-anything
 export const rules = {
     // added in v5.1
     "align": {

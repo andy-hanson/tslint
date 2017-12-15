@@ -22,7 +22,9 @@ import * as ts from "typescript";
 import * as Lint from "..";
 import { getSymbolDeprecation } from './deprecationRule';
 
-import { isTested, PropertyDeclarationLike, Tested, ElementOfClassOrInterface, Info, AccessFlags, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
+import { isTested, PropertyDeclarationLike, Tested, ElementOfClassOrInterface, Info, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
+import { AccessFlags } from './analysis/accessFlags';
+import { isNodeFlagSet } from 'tsutils';
 
 //todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
@@ -50,6 +52,15 @@ export class Rule extends Lint.Rules.TypedRule {
     /* tslint:enable:object-literal-sort-keys */
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
+        /*const errs = ts.getPreEmitDiagnostics(program, sourceFile);
+        for (const err of errs) {
+            const text = ts.flattenDiagnosticMessageText(err.messageText, "\n");
+            const file = err.file!;
+            const pos = file.getLineAndCharacterOfPosition(err.start!);
+            console.log(file.fileName, pos, text);
+        }
+        assert(errs.length === 0); //kill
+        */
         const info = getInfo(program);
         const checker = program.getTypeChecker();
         return this.applyWithWalker(new Walker(sourceFile, this.ruleName, parseOptions(this.getOptions()), info, checker));
@@ -139,6 +150,7 @@ class Walker extends Lint.AbstractWalker<Options> {
             return;
         }
 
+
         const info = this.info.properties.get(sym);
         if (info === undefined) {
             this.addFailureAtNode(node, "UNUSED"); //!
@@ -173,13 +185,13 @@ class Walker extends Lint.AbstractWalker<Options> {
             if (!x.everUsedPublicly() && !hasModifier(p.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.ProtectedKeyword)) {
                 this.addFailureAtNode(p, "Property can be made private.")
             }
-            if (!x.everMutated() && !hasModifier(p.modifiers, ts.SyntaxKind.ReadonlyKeyword)) {
+            if (!x.everWritten() && !hasModifier(p.modifiers, ts.SyntaxKind.ReadonlyKeyword)) {
                 this.addFailureAtNode(p, "Property can be made readonly.");
             }
             if (!x.everRead()) {
                 this.addFailureAtNode(p, "Element is created/written to but never read") //dup
             }
-            if (!x.everCreatedOrMutated()) {
+            if (!x.everCreatedOrWritten()) {
                 if (this.info.interfaceIsDirectlyCreated.has((sym as any).parent)) { //!
                     this.addFailureAtNode(p, "Property is read but never created or written to.")
                 }
@@ -200,10 +212,15 @@ function isTestedElement(node: Tested): node is ElementOfClassOrInterface {
 }
 
 export function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-    return isIgnored(node)
+    return isAmbient(node)
+        || isIgnored(node)
         || isDeprecated(node, symbol, checker)
         || isOverload(node, symbol, checker)
         || isTestedElement(node) && isOverride(node, checker);
+}
+
+function isAmbient(node: Tested): boolean { //test
+    return isNodeFlagSet(node, (ts.NodeFlags as any).Ambient) //todo: make that flag public
 }
 
 function isIgnored(node: Tested): boolean {

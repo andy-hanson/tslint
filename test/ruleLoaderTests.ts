@@ -112,7 +112,7 @@ describe("Rule Loader", () => {
     });
 });
 
-function everyRule(): string[] {
+function everyRule(): ReadonlyArray<string> {
     return fs.readdirSync(srcRulesDir)
         .filter((file) => /Rule.ts$/.test(file))
         .map((file) => file.substr(0, file.length - "Rule.ts".length))

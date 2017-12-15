@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// tslint:disable-next-line no-unused-anything
 export const rules = {
     "adjacent-overload-signatures": true,
     "align": {
@@ -202,6 +203,7 @@ export const rules = {
         ],
     },
 };
+// tslint:disable-next-line no-unused-anything
 export const jsRules = {
     "align": {
         options: [

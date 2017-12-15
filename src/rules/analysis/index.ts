@@ -21,6 +21,7 @@ import * as ts from "typescript";
 
 import { skipAlias } from "../noUnnecessaryQualifierRule";
 import { getEqualsKind } from '../..';
+import { SymbolInfo, accessFlags, AccessFlags } from './accessFlags';
 
 const infoCache = new WeakMap<ts.Program, Info>();
 
@@ -38,7 +39,7 @@ function getInfoWorker(program: ts.Program): Info {
 
 //name
 export type Tested = (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration | ts.FunctionDeclaration) & { readonly name: ts.Identifier }; //tslint:disable-line no-unused-anything
-export function isTested(node: ts.Node): node is Tested {
+export function isTested(node: ts.Node): node is Tested { //what does this mean???
     return (isElementOfClassOrInterface(node)
         || ts.isVariableDeclaration(node)
         || ts.isParameter(node)
@@ -50,7 +51,6 @@ export interface Info {
     readonly properties: ReadonlyMap<ts.Symbol, SymbolInfo>;
     readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>;
     readonly interfaceIsDirectlyCreated: ReadonlySet<ts.Symbol>;
-    readonly symbolToTypeIsMutated: ReadonlySet<ts.Symbol>; //name
 }
 
 //name
@@ -59,26 +59,29 @@ class Foo {
     private readonly properties = new Map<ts.Symbol, SymbolInfo>(); //name
     private readonly enumMembers = new Map<ts.Symbol, EnumAccessFlags>();
     private readonly interfaceIsDirectlyCreated = new Set<ts.Symbol>();
-    private readonly symbolToTypeIsMutated = new Set<ts.Symbol>();
+    //private readonly symbolToTypeIsMutated = new Set<ts.Symbol>();
     //tracks when a property or return is assigned to a local variable.
     private readonly localVariableAliases = new Map<ts.Symbol, ts.Symbol[]>();
 
     finish(): Info {
         //todo: repeat until no changes
         this.localVariableAliases.forEach((aliases, sym) => {
+            const originalInfo = this.properties.get(sym)!;
             for (const alias of aliases) {
-                if (this.symbolToTypeIsMutated.has(alias)) {
-                    this.symbolToTypeIsMutated.add(sym);
+                //todo: might be a private alias...
+                const aliasInfo = this.properties.get(alias)!;
+                if (aliasInfo.everUsedAsMutableCollection()) {//todo: public/private difference
+                    originalInfo.private |= AccessFlags.ReadWithMutableType;
+                    originalInfo.public |= AccessFlags.ReadWithMutableType;
                 }
+
+                //if (this.symbolToTypeIsMutated.has(alias)) {
+                //    this.symbolToTypeIsMutated.add(sym);
+                //}
             }
         });
 
-        return {
-            properties: this.properties,
-            enumMembers: this.enumMembers,
-            interfaceIsDirectlyCreated: this.interfaceIsDirectlyCreated,
-            symbolToTypeIsMutated: this.symbolToTypeIsMutated,
-        };
+        return { properties: this.properties, enumMembers: this.enumMembers, interfaceIsDirectlyCreated: this.interfaceIsDirectlyCreated };
     }
 
     analyze(file: ts.SourceFile): void {
@@ -165,22 +168,18 @@ class Foo {
         }
 
         const info = createIfNotSet(this.properties, symbol, () => new SymbolInfo()); //if not a property -- fine, whatever
-        const newFlags = accessFlags(node, symbol);
+        const newFlags = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
         if (symbol.declarations.some(d => d.parent === currentClass)) {
             info.private = info.private | newFlags;
         } else {
             info.public = info.public | newFlags;
         }
+    }
 
-        //track use of the type -- if this is array or map or set, see if we mutate it
-        const x = isPossiblyMutated(node, symbol, this.checker, aliasId => {
-            const aliasSym = this.checker.getSymbolAtLocation(aliasId)!;
-            assert(!!aliasSym);
-            multiMapAdd(this.localVariableAliases, symbol, aliasSym);
-        }); //name
-        if (x) {
-            this.symbolToTypeIsMutated.add(symbol);
-        }
+    private addAlias(aliasId: ts.Identifier, symbol: ts.Symbol) {
+        const aliasSym = this.checker.getSymbolAtLocation(aliasId)!;
+        assert(!!aliasSym);
+        multiMapAdd(this.localVariableAliases, symbol, aliasSym);
     }
 }
 
@@ -192,179 +191,6 @@ function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
         values.push(value);
     }
 }
-
-function isPossiblyMutated(
-    node: ts.Identifier,
-    symbol: ts.Symbol,
-    checker: ts.TypeChecker,
-    addAlias: (id: ts.Identifier) => void
-): boolean {
-    const x = isSymbolFlagSet(symbol, ts.SymbolFlags.Method | ts.SymbolFlags.Function) ? getCall(node) : node;
-    return x !== undefined && isPossiblyMutableUse(x, checker, addAlias);
-}
-
-function getCall(node: ts.Identifier) {
-    const parent = node.parent!;
-    const x = ts.isPropertyAccessExpression(parent) && parent.name === node ? parent.parent! : parent;
-    return ts.isCallExpression(x) ? x : undefined;
-}
-
-function isPossiblyMutableUse(node: ts.Expression, checker: ts.TypeChecker, addAlias: (id: ts.Identifier) => void): boolean {
-    //TODO: `x[0]` is immutable but `x[0] = 1` isn't
-    const parent = node.parent!;
-    if (isTested(parent) && parent.name === node) {
-        return false;
-    }
-    switch (parent.kind) {
-        case ts.SyntaxKind.AsExpression:
-        case ts.SyntaxKind.TypeAssertionExpression:
-        case ts.SyntaxKind.NonNullExpression:
-        case ts.SyntaxKind.ParenthesizedExpression:
-            return isPossiblyMutableUse(parent as ts.AsExpression | ts.TypeAssertion | ts.NonNullExpression | ts.ParenthesizedExpression, checker, addAlias);
-
-        case ts.SyntaxKind.PropertyAccessExpression: {
-            const { expression, name } = parent as ts.PropertyAccessExpression;
-            if (name === node) {//prefer conditional
-                //x.y.z.array
-                return isPossiblyMutableUse(parent as ts.PropertyAccessExpression, checker, addAlias);
-            } else {
-                assert(expression === node);
-                //Check that it's not a mutating method
-                return isMutatingMethodName(name.text);
-            }
-        }
-        case ts.SyntaxKind.ExpressionStatement:
-        case ts.SyntaxKind.BindingElement:
-        case ts.SyntaxKind.ComputedPropertyName:
-        case ts.SyntaxKind.PrefixUnaryExpression:
-        case ts.SyntaxKind.PostfixUnaryExpression:
-        case ts.SyntaxKind.IfStatement:
-        case ts.SyntaxKind.AwaitExpression:
-        case ts.SyntaxKind.SpreadAssignment:
-        case ts.SyntaxKind.ForInStatement:
-        case ts.SyntaxKind.ForOfStatement:
-        case ts.SyntaxKind.ForStatement:
-        case ts.SyntaxKind.WhileStatement: //condition
-        case ts.SyntaxKind.DoStatement:
-        case ts.SyntaxKind.VoidExpression:
-        case ts.SyntaxKind.CaseClause:
-            return false;
-        case ts.SyntaxKind.VariableDeclaration: {
-            const { initializer, name } = parent as ts.VariableDeclaration;
-            if (ts.isIdentifier(name)) {
-                assert(initializer === node);
-                addAlias(name);
-                return false; //for now -- alias may be mutated though
-            }
-            return fromContext();
-        }
-
-        case ts.SyntaxKind.BinaryExpression: {
-            //note we are looking for mutations of the *value*, and *assigning* is ok.
-            //e.g. `let x: ReadonlyArray<number>; x = [];` is not a mutable use.
-            const { left, operatorToken } = parent as ts.BinaryExpression;
-            if (node === left || operatorToken.kind !== ts.SyntaxKind.EqualsToken) {
-                return false;
-            }
-            //Assigning to something -- check that we're assigning to a readonly thing
-            return fromContext();
-        }
-
-        case ts.SyntaxKind.PropertyDeclaration:
-            return node === (parent as ts.PropertyDeclaration).initializer && fromContext();
-
-        //creations don't mutate obvs
-        case ts.SyntaxKind.PropertySignature:
-        case ts.SyntaxKind.TypeAliasDeclaration:
-        case ts.SyntaxKind.ModuleDeclaration:
-        case ts.SyntaxKind.TypeReference:
-        case ts.SyntaxKind.InterfaceDeclaration:
-        case ts.SyntaxKind.ExpressionWithTypeArguments:
-        case ts.SyntaxKind.ClassDeclaration:
-        case ts.SyntaxKind.ExportAssignment:
-        case ts.SyntaxKind.NamespaceExportDeclaration:
-        case ts.SyntaxKind.TypeParameter:
-        case ts.SyntaxKind.ExportSpecifier:
-        case ts.SyntaxKind.NamespaceImport:
-        case ts.SyntaxKind.TypeOfExpression:
-        case ts.SyntaxKind.TemplateSpan:
-        case ts.SyntaxKind.SpreadElement:
-        case ts.SyntaxKind.SwitchStatement: //the thing being switched on
-        case ts.SyntaxKind.EnumDeclaration:
-        case ts.SyntaxKind.ImportSpecifier:
-        case ts.SyntaxKind.ImportClause:
-        case ts.SyntaxKind.ImportEqualsDeclaration:
-            return false;
-
-        //type uses don't mutate obvs
-        case ts.SyntaxKind.QualifiedName:
-        case ts.SyntaxKind.TypePredicate:
-        case ts.SyntaxKind.TypeQuery:
-            return false;
-
-        case ts.SyntaxKind.ElementAccessExpression: {
-            const { expression, argumentExpression } = parent as ts.ElementAccessExpression;
-            if (node === argumentExpression) {
-                return false;
-            }
-            assert(node === expression);
-            return propertyIsMutated(parent as ts.ElementAccessExpression);
-        }
-
-        case ts.SyntaxKind.ConditionalExpression:
-            return node !== (parent as ts.ConditionalExpression).condition && fromContext();
-
-        //these expressions may expose it mutably depending on the contextual type
-        case ts.SyntaxKind.ArrayLiteralExpression:
-        case ts.SyntaxKind.ReturnStatement:
-        case ts.SyntaxKind.NewExpression:
-        case ts.SyntaxKind.CallExpression:
-        case ts.SyntaxKind.ArrowFunction: //return value
-        case ts.SyntaxKind.Parameter: //initializer
-            return fromContext();
-
-        case ts.SyntaxKind.PropertyAssignment:
-        case ts.SyntaxKind.ShorthandPropertyAssignment:
-            return true;//TODO: only if the property being assigned is mutable type
-
-        case ts.SyntaxKind.ThrowStatement:
-            return true; //be pessimistic since we don't have typed exceptions
-
-        default:
-            throw new Error(`TODO: handle ${ts.SyntaxKind[parent.kind]}, ${parent.getText()}`)
-    }
-
-    //unclosure?
-    function fromContext(): boolean {
-        // In all other locations: if provided to a context with a readonly type, not a mutable use.
-        // `function f(): ReadonlyArray<number> { return x; }` uses `x` readonly, `funciton f(): number[]` does not.
-        const contextualType = checker.getContextualType(node);
-        //If no contextual type, be pessimistic
-        return !contextualType || !checker.typeToString(contextualType).startsWith("Readonly");
-    }
-}
-
-function isMutatingMethodName(name: string): boolean {
-    switch (name) {
-        // Array
-        case "copyWithin":
-        case "pop":
-        case "push":
-        case "shift":
-        case "sort":
-        case "splice":
-        case "unshift":
-        // Set / Map
-        case "add":
-        case "clear":
-        case "delete":
-        case "set":
-            return true;
-        default:
-            return false;
-    }
-}
-
 
 //TODO: handle non-identifier
 export type ElementOfClassOrInterface =
@@ -378,20 +204,7 @@ function isElementOfClassOrInterface(node: ts.Node): node is ElementOfClassOrInt
     return (ts.isClassElement(node) || ts.isTypeElement(node))
         && node.name !== undefined
         && ts.isIdentifier(node.name)
-        && (ts.isClassLike(node.parent!) || ts.isInterfaceDeclaration(node.parent!));
-}
-
-//!
-export function showFlags(symbol: ts.Symbol) {
-    const all: string[] = [];
-    for (const name in ts.SymbolFlags) {
-        const val = ts.SymbolFlags[name];
-        if (typeof val !== "number") continue;
-        if (isSymbolFlagSet(symbol, val)) {
-            all.push(name);
-        }
-    }
-    console.log(all.join());
+        && (ts.isClassLike(node.parent!) || ts.isInterfaceDeclaration(node.parent!) || ts.isTypeLiteralNode(node.parent!));
 }
 
 export type PropertyDeclarationLike = ts.PropertyDeclaration | ts.ParameterDeclaration | ts.PropertySignature;
@@ -410,102 +223,7 @@ function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key
     }
 }
 
-export class SymbolInfo {
-    private = AccessFlags.None;
-    public = AccessFlags.None;
-
-    //todo: detect created-but-never-read
-
-    everCreatedOrMutated(): boolean {
-        return hasAccessFlag(this.private, AccessFlags.Create | AccessFlags.Mutate)
-            || hasAccessFlag(this.public, AccessFlags.Create | AccessFlags.Mutate);
-    }
-
-    everMutated(): boolean {
-        return hasAccessFlag(this.private, AccessFlags.Mutate) || hasAccessFlag(this.public, AccessFlags.Mutate);
-    }
-
-    everUsedPublicly(): boolean {
-        return this.public !== AccessFlags.None;
-    }
-
-    everRead(): boolean {
-        return hasAccessFlag(this.private, AccessFlags.Read) || hasAccessFlag(this.public, AccessFlags.Read);
-    }
-}
-function hasAccessFlag(a: AccessFlags, b: AccessFlags): boolean {
-    return !!(a & b);
-}
-
-
-export const enum AccessFlags {
-    None = 0,
-    /** Only reads from a variable. */
-    Read = 2 ** 0,
-    /** Only writes to a variable without using the result. E.g.: `x++;`. */
-    Mutate = 2 ** 1, //If this is a method, this will be ignored.
-    /** Creates it */
-    Create = 2 ** 2,
-}
-
-function propertyIsMutated(node: ts.PropertyAccessExpression | ts.ElementAccessExpression): boolean {
-    return !!(accessFlags(node) & AccessFlags.Mutate);
-}
-
-//symbol optional so can call in an expression context - shorthandpropertyassignment won't occur in that case
-//TODO: make accessFlagsWorker that takes no symbol and two entry points
-function accessFlags(node: ts.Node, symbol?: ts.Symbol): AccessFlags {
-    const parent = node.parent!;
-    if (ts.isTypeElement(parent)) {
-        return AccessFlags.None;
-    }
-
-    switch (parent.kind) {
-        case ts.SyntaxKind.Parameter:
-            return AccessFlags.Create;
-        case ts.SyntaxKind.PropertyDeclaration:
-            return createIf((parent as ts.PropertyDeclaration).initializer !== undefined);
-        case ts.SyntaxKind.MethodDeclaration:
-            return createIf((parent as ts.MethodDeclaration).body !== undefined);
-        case ts.SyntaxKind.GetAccessor:
-        case ts.SyntaxKind.SetAccessor:
-            return AccessFlags.Create;
-        case ts.SyntaxKind.PropertyAssignment:
-            return (parent as ts.PropertyAssignment).name === node ? AccessFlags.Create : AccessFlags.Read;
-        case ts.SyntaxKind.ShorthandPropertyAssignment:
-            //If this is the property symbol, this creates it. Otherwise this is reading a local variable.
-            return symbol!.flags & ts.SymbolFlags.Property ? AccessFlags.Create : AccessFlags.Read;
-        case ts.SyntaxKind.BindingElement:
-            return symbol!.flags & ts.SymbolFlags.Property ? AccessFlags.Read : AccessFlags.Create;
-        case ts.SyntaxKind.MethodDeclaration:
-            return AccessFlags.Create;
-        case ts.SyntaxKind.PostfixUnaryExpression:
-        case ts.SyntaxKind.PrefixUnaryExpression:
-            const { operator } = parent as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression;
-            return operator === ts.SyntaxKind.PlusPlusToken || operator === ts.SyntaxKind.MinusMinusToken
-                ? writeOrReadWrite()
-                : AccessFlags.Read;
-        case ts.SyntaxKind.BinaryExpression:
-            const { left, operatorToken } = parent as ts.BinaryExpression;
-            return left === node && isAssignmentOperator(operatorToken.kind) ? writeOrReadWrite() : AccessFlags.Read;
-        case ts.SyntaxKind.PropertyAccessExpression:
-            return (parent as ts.PropertyAccessExpression).name !== node ? AccessFlags.Read : accessFlags(parent, symbol);
-        default:
-            return AccessFlags.Read;
-    }
-
-    function createIf(b: boolean): AccessFlags {
-        return b ? AccessFlags.Create : AccessFlags.None;
-    }
-
-    function writeOrReadWrite(): AccessFlags { //name
-        // If grandparent is not an ExpressionStatement, this is used as an expression in addition to having a side effect.
-        const shouldRead = !parent.parent || parent!.parent!.kind !== ts.SyntaxKind.ExpressionStatement;
-        const flags = symbol && isInOwnConstructor(node, symbol) ? AccessFlags.Create : AccessFlags.Mutate;
-        return shouldRead ? flags | AccessFlags.Read : flags;
-    }
-}
-
+//mv to accessflags.ts
 export const enum EnumAccessFlags {
     None = 0,
     Tested = 2 ** 0,
@@ -522,9 +240,9 @@ function accessFlagsForEnumAccess(n: ts.Identifier): EnumAccessFlags {
     }
 
     if (!ts.isPropertyAccessExpression(parent0)) {
-        assert(ts.isQualifiedName(parent0));
-        assert((ts as any).isPartOfTypeNode(parent0));
-        return EnumAccessFlags.None;
+        //may be a binary expression if used inside the enum itself
+        assert(ts.isQualifiedName(parent0) || ts.isBinaryExpression(parent0));
+        return EnumAccessFlags.None; //used as a type, or used inside the enum itself
     }
 
     assert(ts.isPropertyAccessExpression(parent0));
@@ -555,28 +273,6 @@ function accessFlagsForEnumAccess(n: ts.Identifier): EnumAccessFlags {
     }*/
 }
 
-function isInOwnConstructor(node: ts.Node, symbol: ts.Symbol): boolean { //test
-    const decl = symbol.valueDeclaration;
-    if (!decl || !ts.isPropertyDeclaration(decl) && !ts.isClassLike(decl.parent!)) { //todo: handle parameter property too
-        return false;
-    }
-    const ownConstructor = (decl.parent as ts.ClassLikeDeclaration).members.find(m => ts.isConstructorDeclaration(m) && !!m.body);
-
-    while (true) {
-        const parent = node.parent;
-        if (parent === undefined) {
-            return false;
-        }
-        if (ts.isFunctionLike(parent)) {
-            return parent === ownConstructor;
-        }
-        node = parent;
-    }
-}
-
-function isAssignmentOperator(token: ts.SyntaxKind): boolean {
-    return token >= ts.SyntaxKind.FirstAssignment && token <= ts.SyntaxKind.LastAssignment;
-}
 
 //function skipThings(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol { //name
 //    return skipTransient(skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, checker));

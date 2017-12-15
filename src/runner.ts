@@ -261,7 +261,7 @@ async function doLinting(options: Options, files: ReadonlyArray<string>, program
             continue;
         }
 
-        const contents = program !== undefined ? program.getSourceFile(file).text : await tryReadFile(file, logger);
+        const contents = program !== undefined ? program.getSourceFile(file)!.text : await tryReadFile(file, logger);
         if (contents !== undefined) {
             linter.lint(file, contents, configFile);
         }
@@ -327,7 +327,7 @@ function findTsconfig(project: string): string | undefined {
         const projectFile = path.join(project, "tsconfig.json");
         fs.accessSync(projectFile); // throws if file does not exist
         return projectFile;
-    } catch (e) {
+    } catch {
         return undefined;
     }
 }

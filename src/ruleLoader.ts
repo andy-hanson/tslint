@@ -126,7 +126,7 @@ function loadRule(directory: string, ruleName: string): RuleConstructor | "not-f
 function getRuleFullPath(directory: string, ruleName: string): string | undefined {
     try {
         return require.resolve(path.join(directory, ruleName));
-    } catch (e) {
+    } catch {
         return undefined;
     }
 }

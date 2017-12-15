@@ -1,5 +1,23 @@
-function f(xs: string[]) {
-    let y: string[];
-    y = xs;
-    return y;
+
+function checkMembers(member)  {
+    switch (member.kind) {
+        case ts.SyntaxKind.CallSignature:
+        case ts.SyntaxKind.ConstructSignature:
+        case ts.SyntaxKind.MethodSignature:
+            break;
+        case ts.SyntaxKind.MethodDeclaration:
+        case ts.SyntaxKind.Constructor:
+            if ((member as ts.MethodDeclaration | ts.ConstructorDeclaration).body !== undefined) {
+                return undefined;
+            }
+            break;
+        default:
+            return undefined;
+    }
+
+    const signature = member as ts.CallSignatureDeclaration | ts.ConstructSignatureDeclaration | ts.MethodSignature |
+        ts.MethodDeclaration | ts.ConstructorDeclaration;
+    const key = getOverloadKey(signature);
+    return key === undefined ? undefined : { signature, key };
 }
+checkMembers;

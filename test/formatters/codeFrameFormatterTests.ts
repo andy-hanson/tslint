@@ -112,7 +112,7 @@ describe("CodeFrame Formatter", () => {
         `;
 
         /** Convert output lines to an array of trimmed lines for easier comparing */
-        function toTrimmedLines(lines: string): string[] {
+        function toTrimmedLines(lines: string): ReadonlyArray<string> {
             return lines.split("\n").map((line) => line.trim());
         }
 

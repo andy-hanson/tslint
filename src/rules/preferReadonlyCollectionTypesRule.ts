@@ -75,8 +75,11 @@ function walk(ctx: Lint.WalkContext<void>, info: Info, checker: ts.TypeChecker):
         //if (this.checker.typeToString(actualType).endsWith("[]")) {
         const typeNode = getTypeNode(node);
         const x = typeNode && getMutableCollectionType(typeNode);
-        if (x && !info.symbolToTypeIsMutated.has(symbol)) {
-            ctx.addFailureAtNode(x.node, `Prefer Readonly${x.name}`);
+        if (x) {
+            const y = info.properties.get(symbol)!;
+            if (!y.everUsedAsMutableCollection()) {
+                ctx.addFailureAtNode(x.node, `Prefer Readonly${x.name}`);
+            }
         }
     }
 }

@@ -68,7 +68,7 @@ function loadFormatterModule(name: string): FormatterConstructor | undefined {
     let src: string;
     try {
         src = require.resolve(name);
-    } catch (e) {
+    } catch {
         return undefined;
     }
     return (require(src) as { readonly Formatter: FormatterConstructor }).Formatter;

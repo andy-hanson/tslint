@@ -1,10 +1,7 @@
-const x: Set<number> = new Set();
-class C {
-    p: Set<number> = x;
-    m() {
-        this.p.add(1);
-    }
+function f(): number[] { return []; }
+function g() {
+    const x = f();
+    x.push;
+    return x;
 }
-
-
-[0]: Could be readonly bro
+g;

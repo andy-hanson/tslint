@@ -25,7 +25,7 @@ And some brackets too   [brackets are here]
 ~~~ And even lines that start with   [tildes]
 `;
 export const codeStr1 = lintStr1;
-export const resultErrs1: LintError[] = [];
+export const resultErrs1: ReadonlyArray<LintError> = [];
 
 
 export const lintStr2 = `
@@ -35,7 +35,7 @@ A file with an error
 export const codeStr2 = `
 A file with an error
 `;
-export const resultErrs2: LintError[] = [
+export const resultErrs2: ReadonlyArray<LintError> = [
   { startPos: { line: 1, col: 0 }, endPos: { line: 1, col: 5 }, message: "error" },
 ];
 
@@ -62,7 +62,7 @@ A file with lots of errors
    And more code here
    Final code here
 `;
-export const resultErrs3: LintError[] = [
+export const resultErrs3: ReadonlyArray<LintError> = [
   { startPos: { line: 1, col: 0 }, endPos: { line: 1, col: 5 }, message: "error" },
   { startPos: { line: 1, col: 3 }, endPos: { line: 3, col: 12 }, message: "multiline error1" },
   { startPos: { line: 1, col: 4 }, endPos: { line: 1, col: 17 }, message: "error2" },
@@ -101,7 +101,7 @@ if (code === lint-error-free) {
 }
 
 `;
-export const resultErrs6: LintError[] = [
+export const resultErrs6: ReadonlyArray<LintError> = [
     { startPos: { line: 1, col: 13 }, endPos: { line: 1, col: 28 }, message: "A longer error message I didn't want to type every time!" },
 ];
 

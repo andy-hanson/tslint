@@ -180,7 +180,7 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
                 const fixes = mapDefined(failures, (f) => f.getFix());
                 newFileText = Replacement.applyFixes(fileTextWithoutMarkup, fixes);
             }
-        } catch (e) {
+        } catch {
             fixedFileText = "";
             newFileText = "";
         }

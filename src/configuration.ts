@@ -31,12 +31,12 @@ export interface IConfigurationFile {
      * Not inherited.
      */
     // tslint:disable-next-line no-unused-anything (TODO: Figure out what this was for)
-    readonly defaultSeverity?: RuleSeverity;
+    defaultSeverity?: RuleSeverity;
 
     /**
      * An array of config files whose rules are inherited by this config file.
      */
-    readonly extends: string[];
+    extends: string[];
 
     /**
      * Rules that are used to lint to JavaScript files.
@@ -46,14 +46,14 @@ export interface IConfigurationFile {
     /**
      * A subset of the CLI options.
      */
-    readonly linterOptions?: Partial<{
+    linterOptions?: Partial<{
         readonly exclude: string[];
     }>;
 
     /**
      * Directories containing custom rules. Resolved using node module semantics.
      */
-    readonly rulesDirectory: string[];
+    rulesDirectory: string[];
 
     /**
      * Rules that are used to lint TypeScript files.
@@ -140,7 +140,7 @@ export function findConfigurationPath(suppliedConfigFilePath: string | null, inp
             if (stats.isFile()) {
                 useDirName = true;
             }
-        } catch (e) {
+        } catch {
             // throws if file doesn't exist
             useDirName = true;
         }
@@ -272,7 +272,7 @@ function resolveConfigurationPath(filePath: string, relativeTo?: string) {
         const configName = matches![1];
         try {
             return require.resolve(`./configs/${configName}`);
-        } catch (err) {
+        } catch {
             throw new Error(`${filePath} is not a built-in config, try "tslint:recommended" instead.`);
         }
     }
@@ -280,10 +280,10 @@ function resolveConfigurationPath(filePath: string, relativeTo?: string) {
     const basedir = relativeTo !== undefined ? relativeTo : process.cwd();
     try {
         return resolve.sync(filePath, { basedir });
-    } catch (err) {
+    } catch {
         try {
             return require.resolve(filePath);
-        } catch (err) {
+        } catch {
             throw new Error(`Invalid "extends" configuration value - could not require "${filePath}". ` +
                 "Review the Node lookup algorithm (https://nodejs.org/api/modules.html#modules_all_together) " +
                 "for the approximate method TSLint uses to find the referenced configuration file.");
@@ -368,7 +368,7 @@ export function getRulesDirectories(directories?: string | string[], relativeTo?
             if (!useAsPath(dir)) {
                 try {
                     return path.dirname(resolve.sync(dir, { basedir: relativeTo }));
-                } catch (err) {
+                } catch {
                     // swallow error and fallback to using directory as path
                 }
             }
