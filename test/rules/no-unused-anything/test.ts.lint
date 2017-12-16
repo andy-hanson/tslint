@@ -141,9 +141,10 @@ declare function use(...args: any[]): void;
     {
         class C {
             constructor(readonly x: string[]) {}
+
         }
         interface I {
-            x: string[];
+            readonly x: string[];
         }
         const i: I = new C([]);
         i.x.push("");
@@ -151,6 +152,19 @@ declare function use(...args: any[]): void;
     }
 }
 
+// Privacy tests
+{
+    class C {
+        constructor(readonly x: number) {}
+                             ~ [private]
+	    m() {
+	        use(this.x);
+	    }
+	}
+	new C(0).m();
+}
+
+[private]: Analysis found no public uses; this should be private.
 [pushonly]: This collection is created and filled with values, but never read from.
 [sideeffectonly]: This function is used for its side effect, but the return value is never used.
 [nocreate]: Analysis found places where this is read, but found no places where it is given a value.

@@ -376,7 +376,7 @@ type Rank = number;
 type Access = "public" | "protected" | "private";
 
 interface Options {
-    readonly order: MemberCategory[];
+    readonly order: ReadonlyArray<MemberCategory>;
     readonly alphabetize: boolean;
 }
 

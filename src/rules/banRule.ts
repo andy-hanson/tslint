@@ -28,8 +28,8 @@ interface MethodBan extends FunctionBan {
 }
 
 interface Options {
-    readonly functions: FunctionBan[];
-    readonly methods: MethodBan[];
+    readonly functions: ReadonlyArray<FunctionBan>;
+    readonly methods: ReadonlyArray<MethodBan>;
 }
 
 interface OptionsInput {

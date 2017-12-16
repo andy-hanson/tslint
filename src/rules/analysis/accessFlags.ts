@@ -26,6 +26,12 @@ export class SymbolInfo {
 
     //todo: detect created-but-never-read
 
+    //kill
+    show() { //tslint:disable-line no-unused-anything
+        return { private: showAccessFlags(this.private), public: showAccessFlags(this.public) }
+    }
+
+
     everUsedAsMutableCollection(): boolean {
         return this.has(AccessFlags.MutateCollectionEitherWay);
     }
@@ -61,6 +67,20 @@ export class SymbolInfo {
 }
 function hasAccessFlag(a: AccessFlags, b: AccessFlags): boolean {
     return !!(a & b);
+}
+
+
+
+function showAccessFlags(f: AccessFlags) {//kill
+    const s = [];
+    if (f & AccessFlags.ReadReadonly) s.push("ReadReadonly");
+    if (f & AccessFlags.ReadWithMutableType) s.push("ReadWithMutableType");
+    if (f & AccessFlags.MutateCollection) s.push("MutateCollection");
+    if (f & AccessFlags.Write) s.push("Write");
+    if (f & AccessFlags.CreateFresh) s.push("CreateFresh");
+    if (f & AccessFlags.CreateAlias) s.push("CreateAlias");
+    if (f & AccessFlags.SideEffect) s.push("CreateSideEffect");
+    return s.length === 0 ? "None" : s.join();
 }
 
 export const enum AccessFlags {
@@ -191,16 +211,9 @@ class AccessFlagsChecker {
                 return AccessFlags.ReadReadonly;
 
             case ts.SyntaxKind.VariableDeclaration: {
-                const { initializer, name, type } = parent as ts.VariableDeclaration;
+                const { initializer, name, parent: gp } = parent as ts.VariableDeclaration; //name
                 if (node === name) {
-                    if (initializer !== undefined) {
-                        if (type !== undefined) {
-                            this.addTypeAssignment(this.checker.getTypeFromTypeNode(type), this.checker.getTypeAtLocation(initializer));
-                        }
-                        return createFlag(initializer);
-                    } else {
-                        return AccessFlags.CreateAlias;
-                    }
+                    return ts.isVariableStatement(gp!.parent!) ? createFlag(initializer) : AccessFlags.CreateAlias;
                 } else {
                     assert(node === initializer);
                     if (ts.isIdentifier(name) && shouldAddAlias) {
@@ -215,20 +228,15 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.BinaryExpression: {
                 //note we are looking for mutations of the *value*, and *assigning* is ok.
                 //e.g. `let x: ReadonlyArray<number>; x = [];` is not a mutable use.
-                const { left, operatorToken, right } = parent as ts.BinaryExpression;
+                const { left, operatorToken } = parent as ts.BinaryExpression;
                 if (operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-                    if (node === left) {
-                        this.addTypeAssignment(
-                            this.checker.getTypeAtLocation(left),
-                            this.checker.getTypeAtLocation(right)); //test
+                    return node === left
                         // `x = ...` is a write.
-                        return AccessFlags.Write;
-                    } else {
+                        ? AccessFlags.Write
                         // `... = x` means we are assigning this to something else,
                         // and need the contextual type to know if it's used as a readonly collection.
                         // When assigning to an existing variable there should always be a contextual type, so no need to track an alias.
-                        return this.fromContext(node)
-                    }
+                        : this.fromContext(node);
                 } else {
                     return node === left && isAssignmentKind(operatorToken.kind)
                         // `x += ...` is treated as a write, and also as a read if it appears in another expression as in `f(x += 1)`.
@@ -243,13 +251,7 @@ class AccessFlagsChecker {
 
             case ts.SyntaxKind.PropertyDeclaration: {
                 const { name, initializer } = parent as ts.PropertyDeclaration;
-                if (node === name) {
-                    return initializer ? createFlag(initializer) : AccessFlags.None;
-                }
-                else {
-                    assert(node === initializer);
-                    return this.fromContext(node);
-                }
+                return node === name ? createFlag(initializer) : this.fromContext(node);
             }
 
             case ts.SyntaxKind.ExportSpecifier: {
@@ -374,8 +376,12 @@ class AccessFlagsChecker {
     }
 }
 
-function createFlag(initializer: ts.Expression): AccessFlags {
-    return isFreshCollection(initializer) ? AccessFlags.CreateFresh : AccessFlags.CreateAlias;
+function createFlag(initializer: ts.Expression | undefined): AccessFlags {
+    return initializer === undefined
+        ? AccessFlags.None
+        : isFreshCollection(initializer)
+        ? AccessFlags.CreateFresh
+        : AccessFlags.CreateAlias;
 }
 function isFreshCollection(initializer: ts.Expression): boolean {
     return ts.isArrayLiteralExpression(initializer) ||
@@ -447,6 +453,7 @@ function isInOwnConstructor(node: ts.Node, symbol: ts.Symbol): boolean { //test
 //    return token >= ts.SyntaxKind.FirstAssignment && token <= ts.SyntaxKind.LastAssignment;/
 //}
 
+//mv
 export function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
     const values = map.get(key);
     if (values === undefined) {
@@ -456,6 +463,7 @@ export function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
     }
 }
 
+//mv
 function assertNever(value: never): never {
     throw new Error(value);
 }

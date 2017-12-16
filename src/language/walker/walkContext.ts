@@ -23,7 +23,12 @@ export class WalkContext<T> {
     // tslint:disable-next-line no-unused-anything (TODO: make this private?)
     public readonly failures: RuleFailure[] = [];
 
-    constructor(public readonly sourceFile: ts.SourceFile, public readonly ruleName: string, public readonly options: T) {}
+    constructor(
+        public readonly sourceFile: ts.SourceFile,
+        // tslint:disable-next-line no-unused-anything (could be private)
+        public readonly ruleName: string,
+        public readonly options: T,
+    ) {}
 
     /** Add a failure with any arbitrary span. Prefer `addFailureAtNode` if possible. */
     public addFailureAt(start: number, width: number, failure: string, fix?: Fix) {

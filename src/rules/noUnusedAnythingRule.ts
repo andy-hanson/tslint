@@ -15,13 +15,12 @@
  * limitations under the License.
  */
 
-import assert = require("assert");
 import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind, isSignatureDeclaration } from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
 
-import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, isExported } from './analysis';
+import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, canBePrivate } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
 import { getSymbolDeprecation } from './analysis/moarUtils';
 import { AccessFlags, SymbolInfo, isMutableCollectionTypeName } from './analysis/accessFlags';
@@ -65,7 +64,7 @@ export class Rule extends Lint.Rules.TypedRule {
                 console.log("<no file>", text);
             }
         }
-        assert(errs.length === 0); //kill
+        //assert(errs.length === 0); //kill
 
         const info = getInfo(program);
         const checker = program.getTypeChecker();
@@ -110,6 +109,7 @@ class Walker extends Lint.AbstractWalker<Options> {
                 case ts.SyntaxKind.Parameter: {
                     const p = node as ts.ParameterDeclaration & { readonly name: ts.Identifier };
                     if (ts.isParameterPropertyDeclaration(node)) {
+                        //Don't care if the parameter-side is unused, since it's used to create the property.
                         this.handleSymbol(p, getThePropertySymbol(p, this.checker));
                     }
                     //TODO: for a signature, look into its implementers for uses
@@ -165,19 +165,23 @@ class Walker extends Lint.AbstractWalker<Options> {
 
     private checkSymbolUses(node: Tested, symbol: ts.Symbol, info: SymbolInfo): void {
         if (!info.everUsedPublicly()) {
-            if (ts.isClassLike(node.parent!)) {
-                //todo: test that we handle completely unused abstract method
-                if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
-                    this.addFailureAtNode(node, "Analysis found no public uses; this should be private.");
-                }
-            }
-            else if (isExported(node)) {
+            const x = canBePrivate(node);
+            if (x === undefined) {
+                this.addFailureAtNode(node.name, "Analysis found no uses of this symbol.");
+                return;
+            } else if (ts.isSourceFile(x)) {
                 if (!isIsImplicitlyExported(node, this.sourceFile, this.checker)) { //test implicit exports
                     this.addFailureAtNode(node.name, "Analysis found no uses in other modules; this should not be exported.");
+                    return;
                 }
-            }
-            else {
-                this.addFailureAtNode(node.name, "Analysis found no uses of this symbol.");
+            } else {
+                //todo: test that we handle completely unused abstract method
+                if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)
+                    //may need to be public due to assigning this to an interface
+                    && !this.info.isPropertyUsedForAssignment(symbol, this.checker)) {
+                    this.addFailureAtNode(node.name, "Analysis found no public uses; this should be private.");
+                    return;
+                }
             }
             return;
         }
@@ -198,9 +202,11 @@ class Walker extends Lint.AbstractWalker<Options> {
                     }
                 }
                 else {
-                    this.addFailureAtNode(
-                        node.name,
-                        "This symbol is given a value, but analysis found no reads. This is likely dead code.");
+                    if (!this.info.isPropertyUsedForAssignment(symbol, this.checker)) {
+                        this.addFailureAtNode(
+                            node.name,
+                            "This symbol is given a value, but analysis found no reads. This is likely dead code.");
+                    }
                 }
             }
             return;
@@ -214,9 +220,7 @@ class Walker extends Lint.AbstractWalker<Options> {
                     : "Analysis found no writes to this property; mark it as `readonly`.");
         }
 
-        if (!info.everCreatedOrWritten()
-            && !this.info.isParentCastedTo(symbol) //combine these 2 methods
-            && !this.info.isPropertyAssignedIndirectly(symbol, this.checker)) {
+        if (!info.everCreatedOrWritten() && !this.info.symbolIsPropertyOfTypeAssignedToSomehow(symbol, this.checker)) {
             this.addFailureAtNode(
                 node.name,
                 "Analysis found places where this is read, but found no places where it is given a value.");
@@ -331,6 +335,8 @@ function isOverload(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): b
     return signatureSymbol !== undefined && signatureSymbol.declarations!.length !== 1;
 }
 
+//test: for parameter property in deprecated class
+//really, all we care is that some parent node has an `@deprecated` commment, why bother w/ symbols here...
 function isDeprecated(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
     if (isItDeprecated(symbol)) {
         return true;

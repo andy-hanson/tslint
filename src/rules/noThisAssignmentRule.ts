@@ -24,7 +24,7 @@ const ALLOW_THIS_DESTRUCTURING = "allow-destructuring";
 const ALLOWED_THIS_NAMES = "allowed-names";
 
 interface Options {
-    readonly allowedNames: string[];
+    readonly allowedNames: ReadonlyArray<string>;
     readonly allowDestructuring: boolean;
 }
 

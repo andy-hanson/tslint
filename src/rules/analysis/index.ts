@@ -16,7 +16,7 @@
  */
 
 import assert = require("assert");
-import { hasModifier, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
+import { hasModifier, isSymbolFlagSet, isTypeFlagSet, isExpression } from "tsutils";
 import * as ts from "typescript";
 
 import { getEqualsKind } from "../..";
@@ -82,33 +82,47 @@ export class AnalysisResult {
     constructor(
         readonly symbolInfos: ReadonlyMap<ts.Symbol, SymbolInfo>,
         readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>,
-        readonly typeAssignmentsSourceToTarget: ReadonlyMap</*from*/ ts.Type, /*to*/ ReadonlyArray<ts.Type>>,
-        readonly typeAssignmentsTargetToSource: ReadonlyMap</*to*/ ts.Type, /*from*/ ReadonlyArray<ts.Type>>,
-        readonly castedToTypes: ReadonlySet<ts.Symbol>) {}
+        private readonly typeAssignmentsSourceToTarget: ReadonlyMap</*from*/ ts.Type, /*to*/ ReadonlyArray<ts.Type>>,
+        private readonly typeAssignmentsTargetToSource: ReadonlyMap</*to*/ ts.Type, /*from*/ ReadonlyArray<ts.Type>>,
+        private readonly castedToTypes: ReadonlySet<ts.Symbol>) {}
+
+    //test
+    isPropertyUsedForAssignment(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+        if (!(symbol.flags & ts.SymbolFlags.Property)) {
+            return false; //todo: what about methods
+        }
+        const targets = this.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
+        return targets !== undefined && targets.some(target => checker.getPropertyOfType(target, symbol.name) !== undefined);
+    }
 
     //method in AnalysisResult
     isPropertyAssignedToMutableCollection(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
         const targets = this.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
-        if (!targets) {
-            return false;
-        }
-
-        for (const target of targets) {
+        return targets !== undefined && targets.some(target => {
             const targetProperty = checker.getPropertyOfType(target, symbol.name);
-            if (targetProperty) {
-                //test
-                if (!allowsReadonlyCollectionType(checker.getDeclaredTypeOfSymbol(targetProperty))) {
-                    return true;
-                }
+            //test
+            return targetProperty !== undefined && !allowsReadonlyCollectionType(checker.getDeclaredTypeOfSymbol(targetProperty));
+        });
+    }
+
+    symbolIsPropertyOfTypeAssignedToSomehow(symbol: ts.Symbol, checker: ts.TypeChecker) { //better name
+        //why do these two get the containing type differently?
+        return this.isParentCastedTo(symbol) || this.isPropertyAssignedIndirectly(symbol, checker);
+    }
+
+    private isParentCastedTo(symbol: ts.Symbol): boolean {
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property)) {
+            const parent = getParentOfPropertySymbol(symbol);
+            if (this.castedToTypes.has(parent)) {
+                return true;
             }
         }
-
         return false;
     }
 
-    isPropertyAssignedIndirectly(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+    private isPropertyAssignedIndirectly(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
         //find things that are assigned to this type.
-        const sources = this.typeAssignmentsTargetToSource.get(getTypeContainingProperty(symbol, checker));
+        const sources = symbol.flags & ts.SymbolFlags.Property ? this.typeAssignmentsTargetToSource.get(getTypeContainingProperty(symbol, checker)) : undefined;
         if (!sources) {
             return false;
         }
@@ -122,16 +136,6 @@ export class AnalysisResult {
                 if (sourceProperty) {
                     return true;
                 }
-            }
-        }
-        return false;
-    }
-
-    isParentCastedTo(symbol: ts.Symbol): boolean {
-        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property)) {
-            const parent = getParentOfPropertySymbol(symbol);
-            if (this.castedToTypes.has(parent)) {
-                return true;
             }
         }
         return false;
@@ -217,20 +221,45 @@ class Analyzer {
                         this.trackSymbolUse(node as ts.Identifier, symbol, currentFile, currentClass);
                     }
                 }
+                return;
+            }
+            case ts.SyntaxKind.VariableDeclaration: {
+                const { initializer, type } = node as ts.VariableDeclaration;
+                if (initializer !== undefined && type !== undefined) {
+                    this.addTypeAssignment(this.checker.getTypeFromTypeNode(type), this.checker.getTypeAtLocation(initializer));
+                }
+                break;
+            }
+            case ts.SyntaxKind.BinaryExpression: {
+                const { left, operatorToken, right } = node as ts.BinaryExpression;
+                if (operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+                    this.addTypeAssignment(
+                        this.checker.getTypeAtLocation(left),
+                        this.checker.getTypeAtLocation(right));
+                }
                 break;
             }
             case ts.SyntaxKind.ClassDeclaration:
             case ts.SyntaxKind.ClassExpression:
                 node.forEachChild(child => this.analyze(child, currentFile, node as ts.ClassLikeDeclaration));
-                break;
+                return;
             case ts.SyntaxKind.TypeAssertionExpression:
             case ts.SyntaxKind.AsExpression:
             case ts.SyntaxKind.TypePredicate:
                 this.addCastToTypeNode((node as ts.AsExpression | ts.TypeAssertion | ts.TypePredicateNode).type);
-                //falls through
-            default:
-                node.forEachChild(child => this.analyze(child, currentFile, currentClass));
+
         }
+
+        //at any location, if there's a contextual type, it's a type assignment.
+        if (isExpression(node)) {
+            const ctx = this.checker.getContextualType(node);
+            if (ctx) {
+                //don't need the help from accessFlags then?
+                this.addTypeAssignment(ctx, this.checker.getTypeAtLocation(node));
+            }
+        }
+
+        node.forEachChild(child => this.analyze(child, currentFile, currentClass));
     }
 
     private trackEnumMemberUse(node: ts.Identifier, symbol: ts.Symbol) {//needs much testing...
@@ -308,6 +337,10 @@ class Analyzer {
     }
 
     private addTypeAssignment(to: ts.Type, from: ts.Type): void {//maybe inline
+        if (to === from) {
+            return;
+        }
+
         //If 'to' is a union, we need to assign to parts.
         if (to.flags & ts.TypeFlags.UnionOrIntersection) {
             for (const t of (to as ts.UnionOrIntersectionType).types) {
@@ -409,30 +442,34 @@ function isPublicAccess(
     currentFile: ts.SourceFile,
     currentClass: ts.ClassLikeDeclaration | undefined,
 ): boolean {
-    for (const dec of symbol.declarations!) {
-        const decl = skipStuff(dec); //neater
-        if (hasModifier(decl.modifiers, ts.SyntaxKind.ExportKeyword)) {
-            const parent = decl.parent!;
-            if (ts.isSourceFile(parent)) {
-                return parent !== currentFile //If it's declared in a different file, this is a public use.
-                    //If it's declarede in this file but we implicitly use its type, it's a public use.
-                    || isSymbolFlagSet(symbol, ts.SymbolFlags.Type) && isPublicTypeUse(node);
-            }
+    for (const decl of symbol.declarations!) {
+        const p = canBePrivate(decl); //name
+        if (p === undefined) {
+            continue;
         }
-        if (ts.isClassElement(decl)) {
-            const declaringClass = decl.parent!;
-            if (ts.isClassLike(declaringClass)) {
-                return declaringClass !== currentClass;
-            }
+        if (ts.isSourceFile(p)) { //test: module augmentation used only in its containing source file, still needs export
+            //If it's declarede in this file but we implicitly use its type, it's a public use.
+            return p !== currentFile || isSymbolFlagSet(symbol, ts.SymbolFlags.Type) && isPublicTypeUse(node);
         }
+        return p !== currentClass;
     }
     // For anything other than a class element or export, all uses are public.
     return true;
 }
 
-
-export function isExported(decl: ts.Declaration) {//reuse
-    return hasModifier(skipStuff(decl).modifiers, ts.SyntaxKind.ExportKeyword);
+export function canBePrivate(dec: ts.Declaration): ts.SourceFile | ts.ClassLikeDeclaration | undefined { //name
+    const decl = skipStuff(dec); //neater
+    const parent = decl.parent!;
+    if (hasModifier(decl.modifiers, ts.SyntaxKind.ExportKeyword)) {
+        return ts.isSourceFile(parent) ? parent : undefined;
+    } else if (ts.isClassElement(decl)) {
+        return ts.isClassLike(parent) ? parent : undefined;
+    } else if (ts.isParameterPropertyDeclaration(decl)) {
+        const cls = parent.parent!;
+        return ts.isClassLike(cls) ? cls : undefined;
+    } else {
+        return undefined;
+    }
 }
 
 //name, doc
