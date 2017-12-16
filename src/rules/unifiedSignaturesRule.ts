@@ -354,13 +354,10 @@ function getIndexOfFirstDifference<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>, 
 }
 
 /** Calls `action` for every pair of values in `values`. */
-function forEachPair<T, Out>(values: ReadonlyArray<T>, action: (a: T, b: T) => Out | undefined): Out | undefined {
+function forEachPair<T>(values: ReadonlyArray<T>, action: (a: T, b: T) => void): void {
     for (let i = 0; i < values.length; i++) {
         for (let j = i + 1; j < values.length; j++) {
-            const result = action(values[i], values[j]);
-            if (result !== undefined) {
-                return result;
-            }
+            action(values[i], values[j]);
         }
     }
     return undefined;

@@ -6,7 +6,7 @@
   "rules": {
     "no-unused-anything": [true, {
       "ignoreNames": ["metadata"]
-    }],
+    }]/*,
     "prefer-readonly-collection-types": true,
 
     // Don't want these
@@ -70,6 +70,6 @@
       "check-format",
       "allow-leading-underscore",
       "allow-pascal-case"
-    ]
+    ]*/
   }
 }

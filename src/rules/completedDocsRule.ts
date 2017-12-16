@@ -34,10 +34,10 @@ export const ARGUMENT_PROPERTIES = "properties";
 export const ARGUMENT_TYPES = "types";
 export const ARGUMENT_VARIABLES = "variables";
 
-export const DESCRIPTOR_TAGS = "tags";
-export const DESCRIPTOR_LOCATIONS = "locations";
-export const DESCRIPTOR_PRIVACIES = "privacies";
-export const DESCRIPTOR_VISIBILITIES = "visibilities";
+const DESCRIPTOR_TAGS = "tags";
+const DESCRIPTOR_LOCATIONS = "locations";
+const DESCRIPTOR_PRIVACIES = "privacies";
+const DESCRIPTOR_VISIBILITIES = "visibilities";
 
 export const LOCATION_INSTANCE = "instance";
 export const LOCATION_STATIC = "static";
@@ -46,8 +46,8 @@ export const PRIVACY_PRIVATE = "private";
 export const PRIVACY_PROTECTED = "protected";
 export const PRIVACY_PUBLIC = "public";
 
-export const TAGS_FOR_CONTENT = "content";
-export const TAGS_FOR_EXISTENCE = "existence";
+const TAGS_FOR_CONTENT = "content";
+const TAGS_FOR_EXISTENCE = "existence";
 
 export const VISIBILITY_EXPORTED = "exported";
 export const VISIBILITY_INTERNAL = "internal";

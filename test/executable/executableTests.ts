@@ -548,9 +548,9 @@ describe("Executable", function(this: Mocha.ISuiteCallbackContext) {
 type ErrorWithCode = Error & { readonly code: number };
 type ExecFileCallback = (error: ErrorWithCode, stdout: string, stderr: string) => void;
 
-function execCli(args: string[], cb: ExecFileCallback): cp.ChildProcess;
-function execCli(args: string[], options: cp.ExecFileOptions, cb: ExecFileCallback): cp.ChildProcess;
-function execCli(args: string[], options: cp.ExecFileOptions | ExecFileCallback, cb?: ExecFileCallback): cp.ChildProcess {
+function execCli(args: string[], cb: ExecFileCallback): void;
+function execCli(args: string[], options: cp.ExecFileOptions, cb: ExecFileCallback): void
+function execCli(args: string[], options: cp.ExecFileOptions | ExecFileCallback, cb?: ExecFileCallback): void {
     let filePath = EXECUTABLE_PATH;
 
     // Specify extension for Windows executable to avoid ENOENT errors
@@ -563,7 +563,7 @@ function execCli(args: string[], options: cp.ExecFileOptions | ExecFileCallback,
         options = {};
     }
 
-    return cp.execFile(filePath, args, options, (error, stdout, stderr) => {
+    cp.execFile(filePath, args, options, (error, stdout, stderr) => {
         if (cb === undefined) {
             throw new Error("cb not defined");
         }

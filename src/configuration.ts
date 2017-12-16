@@ -30,7 +30,7 @@ export interface IConfigurationFile {
      * The severity that is applied to rules in _this_ config with `severity === "default"`.
      * Not inherited.
      */
-    // tslint:disable-next-line no-unused-anything (TODO: Figure out what this was for)
+    // tslint:disable-next-line no-unused-anything (TODO)
     defaultSeverity?: RuleSeverity;
 
     /**
@@ -62,7 +62,7 @@ export interface IConfigurationFile {
 }
 
 export interface IConfigurationLoadResult {
-    // tslint:disable-next-line no-unused-anything (TODO: remove?)
+    // tslint:disable-next-line no-unused-anything (TODO)
     readonly path?: string;
     results?: IConfigurationFile;
 }
@@ -72,6 +72,7 @@ export interface IConfigurationLoadResult {
 export const JSON_CONFIG_FILENAME = "tslint.json";
 /** @deprecated use `JSON_CONFIG_FILENAME` or `CONFIG_FILENAMES` instead. */
 export const CONFIG_FILENAME = JSON_CONFIG_FILENAME;
+// tslint:disable-next-line no-unused-anything (TODO)
 export const CONFIG_FILENAMES = [JSON_CONFIG_FILENAME, "tslint.yaml", "tslint.yml"];
 
 export const DEFAULT_CONFIG: IConfigurationFile = {
@@ -82,6 +83,7 @@ export const DEFAULT_CONFIG: IConfigurationFile = {
     rulesDirectory: [],
 };
 
+// tslint:disable-next-line no-unused-anything (TODO)
 export const EMPTY_CONFIG: IConfigurationFile = {
     defaultSeverity: "error",
     extends: [],
@@ -465,7 +467,7 @@ export interface RawConfigFile {
     readonly rules?: RawRulesConfig;
     readonly jsRules?: RawRulesConfig;
 }
-// tslint:enable no-unused-anything
+// tslint:enable no-unused-anything (TODO)
 export interface RawRulesConfig {
     [key: string]: RawRuleConfig;
 }

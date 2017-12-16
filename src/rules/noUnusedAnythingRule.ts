@@ -20,9 +20,10 @@ import * as ts from "typescript";
 
 import * as Lint from "..";
 
-import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, getParentOfPropertySymbol } from './analysis';
+import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, getParentOfPropertySymbol, isExported } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
 import { getSymbolDeprecation } from './analysis/moarUtils';
+import { AccessFlags } from './analysis/accessFlags';
 
 //todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
@@ -50,15 +51,20 @@ export class Rule extends Lint.Rules.TypedRule {
     /* tslint:enable:object-literal-sort-keys */
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
-        /*const errs = ts.getPreEmitDiagnostics(program, sourceFile);
+        const errs = ts.getPreEmitDiagnostics(program, sourceFile);
         for (const err of errs) {
             const text = ts.flattenDiagnosticMessageText(err.messageText, "\n");
-            const file = err.file!;
-            const pos = file.getLineAndCharacterOfPosition(err.start!);
-            console.log(file.fileName, pos, text);
+            const { file, start } = err;
+            if (file) {
+                const file = err.file!;
+                const pos = file.getLineAndCharacterOfPosition(start!);
+                console.log(file.fileName, pos, text);
+            } else {
+                console.log("<no file>", text);
+            }
         }
-        assert(errs.length === 0); //kill
-        */
+        //assert(errs.length === 0); //kill
+
         const info = getInfo(program);
         const checker = program.getTypeChecker();
         return this.applyWithWalker(new Walker(sourceFile, this.ruleName, parseOptions(this.getOptions()), info, checker));
@@ -146,7 +152,7 @@ class Walker extends Lint.AbstractWalker<Options> {
 
         const info = this.info.symbolInfos.get(symbol);
         if (info === undefined) {
-            this.addFailureAtNode(node, "UNUSED"); //test
+            this.addFailureAtNode(node, "Symbol is completely unused."); //test -- don't we at least create the symbol??? So this should never happen?
             return;
         }
 
@@ -154,38 +160,58 @@ class Walker extends Lint.AbstractWalker<Options> {
             if (ts.isClassLike(node.parent!)) {
                 //todo: test that we handle completely unused abstract method
                 if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
-                    this.addFailureAtNode(node, "Class element not used publicly.");
+                    this.addFailureAtNode(node, "Analysis found no public uses; this should be private.");
                 }
             }
-            else if (hasModifier(node.modifiers, ts.SyntaxKind.ExportKeyword)) {
-                //todo: a type may need to be exported due to being used by another exported thing -- must check its uses better
-                if (!isTypeAndIsImplicitlyExported(node, this.sourceFile, this.checker)) {
-                    this.addFailureAtNode(node.name, "No need to export");
+            else if (isExported(node)) {
+                if (!isIsImplicitlyExported(node, this.sourceFile, this.checker)) { //test implicit exports
+                    this.addFailureAtNode(node.name, "Analysis found no uses in other modules; this should not be exported.");
                 }
-
-
-                //if (node.kind !== ts.SyntaxKind.TypeAliasDeclaration && node.kind !== ts.SyntaxKind.InterfaceDeclaration) {
-                //}
             }
             else {
-                this.addFailureAtNode(node.name, "Has no uses"); //ever happens?
+                this.addFailureAtNode(node.name, "Analysis found no uses of this symbol.");
             }
             return;
         }
 
         if (!info.everRead()) {
-            this.addFailureAtNode(node.name, "This is given a value, but the value is never read");
+            //might be a fn used for a side effect.
+            if (info.everUsedForSideEffect() && isFunctionLike(symbol)) {
+                const sig = this.checker.getSignatureFromDeclaration(symbol.valueDeclaration as ts.SignatureDeclaration)!;
+                if (!(this.checker.getReturnTypeOfSignature(sig).flags & ts.TypeFlags.Void)) {
+                    this.addFailureAtNode(node.name, "This function is used for its side effect, but the return value is never used.");
+                }
+            } else {
+                if (info.mutatesCollection()) {
+                    if (!info.has(AccessFlags.CreateAlias)) {
+                        this.addFailureAtNode(
+                            node.name,
+                            "This collection is created and filled with values, but never read from.");
+                    }
+                }
+                else {
+                    this.addFailureAtNode(
+                        node.name,
+                        "This symbol is given a value, but analysis found no reads. This is likely dead code.");
+                }
+            }
             return;
         }
 
         if (!info.everWritten() && isMutable(node)) {
-            this.addFailureAtNode(node.name, ts.isVariableDeclaration(node) ? "Prefer const" : "Make readonly");
+            this.addFailureAtNode(
+                node.name,
+                ts.isVariableDeclaration(node)
+                    ? "Analysis found no mutable uses of this variable; use `const`."
+                    : "Analysis found no writes to this property; mark it as `readonly`.");
         }
 
         if (!info.everCreatedOrWritten()
             && !this.isParentCastedTo(symbol)
             && !this.info.isPropertyAssignedIndirectly(symbol, this.checker)) {
-            this.addFailureAtNode(node.name, "This is read, but is never created or written to.");
+            this.addFailureAtNode(
+                node.name,
+                "Analysis found places where this is read, but found no places where it is given a value.");
         }
 
         //todo: test that we warn for something never used at all...
@@ -200,6 +226,11 @@ class Walker extends Lint.AbstractWalker<Options> {
         }
         return false;
     }
+}
+
+//reuse
+function isFunctionLike(symbol: ts.Symbol): boolean {
+    return isSymbolFlagSet(symbol, ts.SymbolFlags.Function | ts.SymbolFlags.Method);
 }
 
 //note: returns false for things that can't be made immutable (parameters, catch clause variables, methods)
@@ -275,12 +306,20 @@ function getThePropertySymbol(p: ts.ParameterDeclaration, checker: ts.TypeChecke
 }
 
 
-function isTypeAndIsImplicitlyExported(node: Tested, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+function isIsImplicitlyExported(node: Tested, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
     switch (node.kind) {
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.InterfaceDeclaration:
         case ts.SyntaxKind.EnumDeclaration:
             return isTypeImplicitlyExported(checker.getSymbolAtLocation(node.name)!, sourceFile, checker);
+        case ts.SyntaxKind.VariableDeclaration:
+            const s = checker.getSymbolAtLocation(node.name);
+            //may be used in `typeof x` (test)
+            return sourceFile.forEachChild(function cb(child): boolean | undefined {
+                return ts.isTypeQueryNode(child)
+                    ? checker.getSymbolAtLocation(child.exprName) === s
+                    : child.forEachChild(cb);
+            }) === true;
         default:
             return false;
     }

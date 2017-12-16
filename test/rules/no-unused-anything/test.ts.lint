@@ -1,0 +1,2 @@
+export const s = "s"; //must be exported to be used by 'typeof s'
+export type _ = typeof s;

@@ -1,2 +1,6 @@
 {
+    "compilerOptions": {
+        "target": "esnext",
+        "strict": true
+    }
 }

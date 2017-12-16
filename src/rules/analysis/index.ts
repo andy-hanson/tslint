@@ -30,6 +30,7 @@ export function getInfo(program: ts.Program): AnalysisResult {
 
 function getInfoWorker(program: ts.Program): AnalysisResult {
     const analyzer = new Analyzer(program.getTypeChecker());
+    //const allFiles = program.getSourceFiles().filter(f => !f.fileName.includes("lib"));
     for (const file of program.getSourceFiles()) {
         if (file.fileName.includes("lib")) continue;//kill
         analyzer.analyze(file, file, undefined);
@@ -222,7 +223,7 @@ class Analyzer {
         }
     }
 
-    private trackEnumMemberUse(node: ts.Identifier, symbol: ts.Symbol) {
+    private trackEnumMemberUse(node: ts.Identifier, symbol: ts.Symbol) {//needs much testing...
         const prevFlags = this.enumMembers.get(symbol);
         const flags = accessFlagsForEnumAccess(node);
         this.enumMembers.set(symbol, flags | (prevFlags === undefined ? EnumAccessFlags.None : prevFlags));
@@ -236,10 +237,10 @@ class Analyzer {
     ) {
         const bindingSymbol = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
         if (bindingSymbol !== undefined) {
-            this.trackUseOfEachRootSymbol(node, bindingSymbol, currentFile, currentClass);
+            this.trackUseOfEachRootSymbol(node, bindingSymbol, currentFile, currentClass); //needs testing
         }
         else {
-            const objectLiteral = getContainingObjectLiteralElement(node);
+            const objectLiteral = getContainingObjectLiteralElement(node); //needs testing
             if (objectLiteral !== undefined) {
                 for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(objectLiteral, this.checker)) {
                     this.trackUseOfEachRootSymbol(node, assignedPropertySymbol, currentFile, currentClass);
@@ -264,7 +265,7 @@ class Analyzer {
         currentFile: ts.SourceFile,
         currentClass: ts.ClassLikeDeclaration | undefined,
     ) {
-        for (const root of this.checker.getRootSymbols(symbol)) {
+        for (const root of this.checker.getRootSymbols(symbol)) { //needs testing
             this.trackUse(node, root, currentFile, currentClass);
         }
     }
@@ -282,7 +283,7 @@ class Analyzer {
         const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
         const access = accessFlags(node, symbol, this.checker,
             aliasId => this.addAlias(aliasId, symbol),
-            (a, b) => this.addTypeAssignment(a, b));
+            (a, b) => this.addTypeAssignment(a, b)); //neater
         if (isPublicAccess(node, symbol, currentFile, currentClass)) {
             info.public |= access;
         } else {
@@ -297,8 +298,6 @@ class Analyzer {
     }
 
     private addTypeAssignment(to: ts.Type, from: ts.Type): void {//maybe inline
-
-        //console.log("addTypeAssignment", this.checker.typeToString(to), this.checker.typeToString(from));
         //If 'to' is a union, we need to assign to parts.
         if (to.flags & ts.TypeFlags.UnionOrIntersection) {
             for (const t of (to as ts.UnionOrIntersectionType).types) {
@@ -312,9 +311,9 @@ class Analyzer {
         if (isTypeReference(to) && isTypeReference(from)) {
             //if (to.target === from.target) { //problem: if one is REadonlyARray and other is Array...
                 if (to.typeArguments && from.typeArguments && to.typeArguments.length === from.typeArguments.length ) {
-                    for (const [argA, argB] of zip(to.typeArguments, from.typeArguments!)) {
+                    zip(to.typeArguments, from.typeArguments!, (argA, argB) => {
                         this.addTypeAssignment(argA, argB); //uh, variance...
-                    }
+                    });
                 }
             //}
         }
@@ -383,10 +382,10 @@ class Analyzer {
     }
 }
 
-function* zip<T>(a: T[], b: T[]): IterableIterator<[T, T]> {
+function zip<T>(a: T[], b: T[], cb: (a: T, b: T) => void): void {
     assert(a.length === b.length);
     for (let i = 0; i < a.length; i++) {
-        yield [a[i], b[i]];
+        cb(a[i], b[i]);
     }
 }
 
@@ -400,11 +399,13 @@ function isPublicAccess(
     currentFile: ts.SourceFile,
     currentClass: ts.ClassLikeDeclaration | undefined,
 ): boolean {
-    for (const decl of symbol.declarations!) {
+    for (const dec of symbol.declarations!) {
+        const decl = skipStuff(dec); //neater
         if (hasModifier(decl.modifiers, ts.SyntaxKind.ExportKeyword)) {
             const parent = decl.parent!;
             if (ts.isSourceFile(parent)) {
-                return parent !== currentFile
+                return parent !== currentFile //If it's declared in a different file, this is a public use.
+                    //If it's declarede in this file but we implicitly use its type, it's a public use.
                     || isSymbolFlagSet(symbol, ts.SymbolFlags.Type) && isPublicTypeUse(node);
             }
         }
@@ -417,6 +418,25 @@ function isPublicAccess(
     }
     // For anything other than a class element or export, all uses are public.
     return true;
+}
+
+
+export function isExported(decl: ts.Declaration) {//reuse
+    return hasModifier(skipStuff(decl).modifiers, ts.SyntaxKind.ExportKeyword);
+}
+
+//name, doc
+function skipStuff(decl: ts.Declaration) {
+    if (ts.isVariableDeclaration(decl)) {
+        const p = decl.parent!;
+        if (ts.isVariableDeclarationList(p)) {
+            const pp = p.parent!;
+            if (ts.isVariableStatement(pp)) {
+                return pp;
+            }
+        }
+    }
+    return decl;
 }
 
 function isPublicTypeUse(node: ts.Identifier) {

@@ -25,7 +25,7 @@ import Linter = require("../src/linter");
 
 class TestLinter extends Linter {
     public applyFixesHelper(fileName: string, source: string, ruleFailures: ReadonlyArray<RuleFailure>) {
-        return super.applyFixes(fileName, source, ruleFailures);
+        super.applyFixes(fileName, source, ruleFailures);
     }
 }
 

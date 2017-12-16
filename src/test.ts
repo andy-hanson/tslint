@@ -30,7 +30,7 @@ import { denormalizeWinPath, mapDefined, readBufferWithDetectedEncoding } from "
 import { LintError } from "./verify/lintError";
 import * as parse from "./verify/parse";
 
-const MARKUP_FILE_EXTENSION = ".lint";
+const MARKUP_FILE_EXTENSION = ".lint"; //d'oh, can't do imports any more!!!
 const FIXES_FILE_EXTENSION = ".fix";
 
 export interface TestOutput {
@@ -70,7 +70,11 @@ export function runTests(patterns: ReadonlyArray<string>, rulesDirectory?: strin
 }
 
 export function runTest(testDirectory: string, rulesDirectory?: string | string[]): TestResult {
-    const filesToLint = glob.sync(path.join(testDirectory, `**/*${MARKUP_FILE_EXTENSION}`));
+    const filesToLint = [
+        ...glob.sync(path.join(testDirectory, `**/*${MARKUP_FILE_EXTENSION}`)),
+        //also allow plain '.ts' extension, so they can import each other!
+        ...glob.sync(path.join(testDirectory, `**/*.ts`)),
+    ];
     const tslintConfig = Linter.findConfiguration(path.join(testDirectory, "tslint.json"), "").results;
     const tsConfig = path.join(testDirectory, "tsconfig.json");
     let compilerOptions: ts.CompilerOptions = { allowJs: true };
@@ -91,68 +95,31 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
     }
     const results: TestResult = { directory: testDirectory, results: {} };
 
-    for (const fileToLint of filesToLint) {
-        const isEncodingRule = path.basename(testDirectory) === "encoding";
+    const isEncodingRule = path.basename(testDirectory) === "encoding";
 
-        const fileCompileName = denormalizeWinPath(path.resolve(fileToLint.replace(/\.lint$/, "")));
-        let fileText = isEncodingRule ? readBufferWithDetectedEncoding(fs.readFileSync(fileToLint)) : fs.readFileSync(fileToLint, "utf-8");
-        const tsVersionRequirement = parse.getTypescriptVersionRequirement(fileText);
-        if (tsVersionRequirement !== undefined) {
-            // remove prerelease suffix when matching to allow testing with nightly builds
-            if (!semver.satisfies(parse.getNormalizedTypescriptVersion(), tsVersionRequirement)) {
-                results.results[fileToLint] = {
-                    requirement: tsVersionRequirement,
-                    skipped: true,
-                };
-                continue;
-            }
-            // remove the first line from the file before continuing
-            const lineBreak = fileText.search(/\n/);
-            fileText = lineBreak === -1 ? "" : fileText.substr(lineBreak + 1);
+    const mungledFiles = mapDefined(filesToLint, fileToLint => {
+        const m = mungleFile(isEncodingRule, fileToLint);
+        if ("skipped" in m) {
+            results.results[fileToLint] = m;
+            return undefined;
         }
-        fileText = parse.preprocessDirectives(fileText);
-        const fileTextWithoutMarkup = parse.removeErrorMarkup(fileText);
-        const errorsFromMarkup = parse.parseErrorsFromMarkup(fileText);
+        return m;
+    });//name
 
-        let program: ts.Program | undefined;
-        if (hasConfig) {
-            const compilerHost: ts.CompilerHost = {
-                fileExists: (file) => file === fileCompileName || fs.existsSync(file),
-                getCanonicalFileName: (filename) => filename,
-                getCurrentDirectory: () => process.cwd(),
-                getDefaultLibFileName: () => ts.getDefaultLibFileName(compilerOptions),
-                getDirectories: (dir) => fs.readdirSync(dir),
-                getNewLine: () => "\n",
-                getSourceFile(filenameToGet, target) {
-                    if (denormalizeWinPath(filenameToGet) === fileCompileName) {
-                        return ts.createSourceFile(filenameToGet, fileTextWithoutMarkup, target, true);
-                    }
-                    if (path.basename(filenameToGet) === filenameToGet) {
-                        // resolve path of lib.xxx.d.ts
-                        filenameToGet = path.join(path.dirname(ts.getDefaultLibFilePath(compilerOptions)), filenameToGet);
-                    }
-                    const text = fs.readFileSync(filenameToGet, "utf8");
-                    return ts.createSourceFile(filenameToGet, text, target, true);
-                },
-                readFile: (x) => x,
-                useCaseSensitiveFileNames: () => true,
-                writeFile: () => null,
-            };
-
-            program = ts.createProgram([fileCompileName], compilerOptions, compilerHost);
-        }
-
-        const lintOptions = {
-            fix: false,
-            formatter: "prose",
-            formattersDirectory: "",
-            rulesDirectory,
-        };
-        const linter = new Linter(lintOptions, program);
+    const program = hasConfig ? makeMeAProgram(compilerOptions, mungledFiles) : undefined;
+    const lintOptions = {
+        fix: false,
+        formatter: "prose",
+        formattersDirectory: "",
+        rulesDirectory,
+    };
+    const linter = new Linter(lintOptions, program);
+    for (const { fileToLint, fileCompileName, fileTextWithoutMarkup, errorsFromMarkup } of mungledFiles) {
         // Need to use the true path (ending in '.lint') for "encoding" rule so that it can read the file.
         linter.lint(isEncodingRule ? fileToLint : fileCompileName, fileTextWithoutMarkup, tslintConfig);
-        const failures = linter.getResult().failures;
-        const errorsFromLinter: LintError[] = failures.map((failure) => {
+        //todo: want some way to ensure we don't drop failures...
+        const failures = linter.getResult().failures.filter(f => f.getFileName() === fileCompileName);
+        const errorsFromLinter = failures.map(failure => {
             const startLineAndCharacter = failure.getStartPosition().getLineAndCharacter();
             const endLineAndCharacter = failure.getEndPosition().getLineAndCharacter();
 
@@ -197,6 +164,65 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
     }
 
     return results;
+}
+
+interface MungledFile {
+    readonly fileToLint: string;
+    readonly fileCompileName: string;
+    readonly fileTextWithoutMarkup: string;
+    readonly errorsFromMarkup: LintError[];
+} //name
+function mungleFile(isEncodingRule: boolean, fileToLint: string): MungledFile | SkippedTest {
+
+    const fileCompileName = denormalizeWinPath(path.resolve(fileToLint.replace(/\.lint$/, "")));
+    let fileText = isEncodingRule ? readBufferWithDetectedEncoding(fs.readFileSync(fileToLint)) : fs.readFileSync(fileToLint, "utf-8");
+    const tsVersionRequirement = parse.getTypescriptVersionRequirement(fileText);
+    if (tsVersionRequirement !== undefined) {
+        // remove prerelease suffix when matching to allow testing with nightly builds
+        if (!semver.satisfies(parse.getNormalizedTypescriptVersion(), tsVersionRequirement)) {
+            return {
+                requirement: tsVersionRequirement,
+                skipped: true,
+            };
+        }
+        // remove the first line from the file before continuing
+        const lineBreak = fileText.search(/\n/);
+        fileText = lineBreak === -1 ? "" : fileText.substr(lineBreak + 1);
+    }
+    fileText = parse.preprocessDirectives(fileText);
+    const fileTextWithoutMarkup = parse.removeErrorMarkup(fileText);
+    const errorsFromMarkup = parse.parseErrorsFromMarkup(fileText);
+    return { fileToLint, fileCompileName, fileTextWithoutMarkup, errorsFromMarkup };
+}
+
+//todo: separate PR to make only one Program
+function makeMeAProgram(compilerOptions: ts.CompilerOptions, mungledFiles: MungledFile[]): ts.Program {
+    const compilerHost: ts.CompilerHost = {
+        fileExists: (file) =>
+            mungledFiles.some(m => m.fileCompileName === file) || fs.existsSync(file),
+        getCanonicalFileName: (filename) => filename,
+        getCurrentDirectory: () => process.cwd(),
+        getDefaultLibFileName: () => ts.getDefaultLibFileName(compilerOptions),
+        getDirectories: (dir) => fs.readdirSync(dir),
+        getNewLine: () => "\n",
+        getSourceFile(filenameToGet, target) {
+            for (const m of mungledFiles) {
+                if (denormalizeWinPath(filenameToGet) === m.fileCompileName) {
+                    return ts.createSourceFile(filenameToGet, m.fileTextWithoutMarkup, target, true);
+                }
+            }
+            if (path.basename(filenameToGet) === filenameToGet) {
+                // resolve path of lib.xxx.d.ts
+                filenameToGet = path.join(path.dirname(ts.getDefaultLibFilePath(compilerOptions)), filenameToGet);
+            }
+            const text = fs.readFileSync(filenameToGet, "utf8");
+            return ts.createSourceFile(filenameToGet, text, target, true);
+        },
+        readFile: (x) => x,
+        useCaseSensitiveFileNames: () => true,
+        writeFile: () => null,
+    };
+    return ts.createProgram(mungledFiles.map(m => m.fileCompileName), compilerOptions, compilerHost);
 }
 
 export function consoleTestResultsHandler(testResults: ReadonlyArray<TestResult>, logger: Logger): boolean {
