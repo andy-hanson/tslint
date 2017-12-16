@@ -196,7 +196,7 @@ function mungleFile(isEncodingRule: boolean, fileToLint: string): MungledFile | 
 }
 
 //todo: separate PR to make only one Program
-function makeMeAProgram(compilerOptions: ts.CompilerOptions, mungledFiles: MungledFile[]): ts.Program {
+function makeMeAProgram(compilerOptions: ts.CompilerOptions, mungledFiles: ReadonlyArray<MungledFile>): ts.Program {
     const compilerHost: ts.CompilerHost = {
         fileExists: (file) =>
             mungledFiles.some(m => m.fileCompileName === file) || fs.existsSync(file),

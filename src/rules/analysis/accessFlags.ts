@@ -378,9 +378,14 @@ function createFlag(initializer: ts.Expression): AccessFlags {
     return isFreshCollection(initializer) ? AccessFlags.CreateFresh : AccessFlags.CreateAlias;
 }
 function isFreshCollection(initializer: ts.Expression): boolean {
-    //todo: 'new Array/Set/Map' too
-    return ts.isArrayLiteralExpression(initializer);
+    return ts.isArrayLiteralExpression(initializer) ||
+        ts.isNewExpression(initializer) && isMutableCollectionTypeName(initializer.expression);
 }
+
+export function isMutableCollectionTypeName(node: ts.Node): node is ts.Identifier {
+    return ts.isIdentifier(node) && mutableCollectionTypeNames.has(node.text);
+}
+const mutableCollectionTypeNames: ReadonlySet<string> = new Set(["Array", "Set", "Map"]); //name better, reuse?
 
 function writeOrReadWrite(node: ts.Node, symbol: ts.Symbol | undefined): AccessFlags { //name
     const parent = node.parent!;

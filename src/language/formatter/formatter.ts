@@ -58,6 +58,6 @@ export interface IFormatter {
      * @param failures Linter failures that were not fixed
      * @param fixes Fixed linter failures. Available when the `--fix` argument is used on the command line
      */
-    // tslint:disable-next-line prefer-readonly-collection-types (TODO)
+    // tslint:disable-next-line (TODO)
     format(failures: RuleFailure[], fixes?: RuleFailure[]): string;
 }

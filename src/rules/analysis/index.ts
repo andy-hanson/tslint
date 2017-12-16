@@ -127,6 +127,16 @@ export class AnalysisResult {
         return false;
     }
 
+    isParentCastedTo(symbol: ts.Symbol): boolean {
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property)) {
+            const parent = getParentOfPropertySymbol(symbol);
+            if (this.castedToTypes.has(parent)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }
 
 function allowsReadonlyCollectionType(type: ts.Type): boolean {
@@ -382,7 +392,7 @@ class Analyzer {
     }
 }
 
-function zip<T>(a: T[], b: T[], cb: (a: T, b: T) => void): void {
+function zip<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>, cb: (a: T, b: T) => void): void {
     assert(a.length === b.length);
     for (let i = 0; i < a.length; i++) {
         cb(a[i], b[i]);

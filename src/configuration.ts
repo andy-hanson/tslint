@@ -518,7 +518,7 @@ export function parseConfigFile(configFile: RawConfigFile, configFileDir?: strin
 /**
  * Fills in default values for `IOption` properties and outputs an array of `IOption`
  */
-export function convertRuleOptions(ruleConfiguration: Map<string, Partial<IOptions>>): ReadonlyArray<IOptions> {
+export function convertRuleOptions(ruleConfiguration: ReadonlyMap<string, Partial<IOptions>>): ReadonlyArray<IOptions> {
     const output: IOptions[] = [];
     ruleConfiguration.forEach(({ ruleArguments, ruleSeverity }, ruleName) => {
         const options: IOptions = {

@@ -15,15 +15,17 @@
  * limitations under the License.
  */
 
+import assert = require("assert");
 import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind, isSignatureDeclaration } from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
 
-import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, getParentOfPropertySymbol, isExported } from './analysis';
+import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, isExported } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
 import { getSymbolDeprecation } from './analysis/moarUtils';
-import { AccessFlags } from './analysis/accessFlags';
+import { AccessFlags, SymbolInfo, isMutableCollectionTypeName } from './analysis/accessFlags';
+import { find } from '../utils';
 
 //todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
@@ -63,7 +65,7 @@ export class Rule extends Lint.Rules.TypedRule {
                 console.log("<no file>", text);
             }
         }
-        //assert(errs.length === 0); //kill
+        assert(errs.length === 0); //kill
 
         const info = getInfo(program);
         const checker = program.getTypeChecker();
@@ -152,10 +154,16 @@ class Walker extends Lint.AbstractWalker<Options> {
 
         const info = this.info.symbolInfos.get(symbol);
         if (info === undefined) {
-            this.addFailureAtNode(node, "Symbol is completely unused."); //test -- don't we at least create the symbol??? So this should never happen?
+            this.addFailureAtNode(node, "Symbol is completely unused.");
+            //test -- don't we at least create the symbol??? So this should never happen?
             return;
         }
 
+        this.checkSymbolUses(node, symbol, info);
+        this.checkCollectionUses(node, symbol, info);
+    }
+
+    private checkSymbolUses(node: Tested, symbol: ts.Symbol, info: SymbolInfo): void {
         if (!info.everUsedPublicly()) {
             if (ts.isClassLike(node.parent!)) {
                 //todo: test that we handle completely unused abstract method
@@ -207,7 +215,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         }
 
         if (!info.everCreatedOrWritten()
-            && !this.isParentCastedTo(symbol)
+            && !this.info.isParentCastedTo(symbol) //combine these 2 methods
             && !this.info.isPropertyAssignedIndirectly(symbol, this.checker)) {
             this.addFailureAtNode(
                 node.name,
@@ -217,16 +225,64 @@ class Walker extends Lint.AbstractWalker<Options> {
         //todo: test that we warn for something never used at all...
     }
 
-    private isParentCastedTo(symbol: ts.Symbol) {
-        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property)) {
-            const parent = getParentOfPropertySymbol(symbol);
-            if (this.info.castedToTypes.has(parent)) {
-                return true;
-            }
+    private checkCollectionUses(node: Tested, symbol: ts.Symbol, symbolInfo: SymbolInfo): void {
+        if (symbolInfo.everUsedAsMutableCollection()) {
+            return;
         }
-        return false;
+
+        const typeNode = getTypeNode(node);
+        const mutableTypeInfo = typeNode === undefined ? undefined : getMutableCollectionType(typeNode);
+        if (mutableTypeInfo === undefined) {
+            return;
+        }
+
+        //For a property: but this type might be assigned to another type, and that other type might have this property mutable (test)
+        //todo: also for method (test)
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property) && this.info.isPropertyAssignedToMutableCollection(symbol, this.checker)) {
+            return;
+        }
+
+        this.addFailureAtNode(mutableTypeInfo.typeNode, `Prefer Readonly${mutableTypeInfo.typeName}`);
     }
 }
+
+function getMutableCollectionType(typeNode: ts.TypeNode): { readonly typeNode: ts.TypeNode, readonly typeName: string } | undefined {
+    return ts.isUnionTypeNode(typeNode)
+        //Report errors if `string | string[]` is used immutably (should be `string | ReadonlyArray<string>`) (test)
+        ? find(typeNode.types, getMutableCollectionType)
+        : ts.isArrayTypeNode(typeNode)
+        ? { typeNode, typeName: "Array" }
+        : ts.isTypeReferenceNode(typeNode) && isMutableCollectionTypeName(typeNode.typeName)
+        ? { typeNode, typeName: typeNode.typeName.text }
+        : undefined;
+}
+
+//test: that we handle unions
+function getTypeNode(node: Tested): ts.TypeNode | undefined {
+    switch (node.kind) {
+        case ts.SyntaxKind.Parameter:
+        //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
+            return (node as ts.ParameterDeclaration).dotDotDotToken === undefined ? (node as ts.ParameterDeclaration).type : undefined;
+        case ts.SyntaxKind.VariableDeclaration:
+        case ts.SyntaxKind.PropertyDeclaration:
+        case ts.SyntaxKind.MethodDeclaration:
+        case ts.SyntaxKind.MethodSignature:
+        case ts.SyntaxKind.FunctionDeclaration:
+        case ts.SyntaxKind.PropertyDeclaration:
+        case ts.SyntaxKind.PropertySignature:
+        case ts.SyntaxKind.GetAccessor:
+        case ts.SyntaxKind.SetAccessor:
+            return (node as ts.VariableDeclaration | ts.PropertyDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.FunctionDeclaration | ts.PropertyDeclaration | ts.PropertySignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration).type;
+        case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.EnumDeclaration:
+        case ts.SyntaxKind.InterfaceDeclaration:
+        case ts.SyntaxKind.ModuleDeclaration:
+            return undefined;
+        default:
+            throw new Error(`TODO: handle ${ts.SyntaxKind[node.kind]}`)
+    }
+}
+
 
 //reuse
 function isFunctionLike(symbol: ts.Symbol): boolean {
@@ -245,7 +301,7 @@ function isMutable(node: Tested): boolean {
     }
 }
 
-export function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
+function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
     return isAmbient(node)
         || isIgnored(node)
         || isDeprecated(node, symbol, checker)

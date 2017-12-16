@@ -253,7 +253,6 @@ export function createMarkupFromErrors(code: string, lintErrors: LintError[]) {
 
         if (startPos.line === endPos.line) {
             // single line error
-            console.log(startPos.line, codeText.length, code);
             errorLinesForCodeText[startPos.line].push(new EndErrorLine(startPos.col, endPos.col, message));
         } else {
             // multiline error
