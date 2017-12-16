@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Palantir Technologies, Inc.
+ * Copyright 2018 Palantir Technologies, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,14 @@
  * limitations under the License.
  */
 
-import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind } from "tsutils";
+import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind, isSignatureDeclaration } from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
-import { getSymbolDeprecation } from './deprecationRule';
 
-import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags } from './analysis';
+import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, getParentOfPropertySymbol } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
-import { getParentOfPropertySymbol, isPropertyAssignedIndirectly } from './preferReadonlyCollectionTypesRule';
+import { getSymbolDeprecation } from './analysis/moarUtils';
 
 //todo: warn for unused `export const`
 //todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
@@ -160,9 +159,13 @@ class Walker extends Lint.AbstractWalker<Options> {
             }
             else if (hasModifier(node.modifiers, ts.SyntaxKind.ExportKeyword)) {
                 //todo: a type may need to be exported due to being used by another exported thing -- must check its uses better
-                if (node.kind !== ts.SyntaxKind.TypeAliasDeclaration && node.kind !== ts.SyntaxKind.InterfaceDeclaration) {
+                if (!isTypeAndIsImplicitlyExported(node, this.sourceFile, this.checker)) {
                     this.addFailureAtNode(node.name, "No need to export");
                 }
+
+
+                //if (node.kind !== ts.SyntaxKind.TypeAliasDeclaration && node.kind !== ts.SyntaxKind.InterfaceDeclaration) {
+                //}
             }
             else {
                 this.addFailureAtNode(node.name, "Has no uses"); //ever happens?
@@ -181,7 +184,7 @@ class Walker extends Lint.AbstractWalker<Options> {
 
         if (!info.everCreatedOrWritten()
             && !this.isParentCastedTo(symbol)
-            && !isPropertyAssignedIndirectly(symbol, this.checker, this.info)) {
+            && !this.info.isPropertyAssignedIndirectly(symbol, this.checker)) {
             this.addFailureAtNode(node.name, "This is read, but is never created or written to.");
         }
 
@@ -229,17 +232,16 @@ function isIgnored(node: Tested): boolean {
 }
 
 function isOverload(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-    if (symbol.declarations!.length !== 1) {
-        return true;
-    }
     if (!ts.isParameter(node)) {
         return false;
     }
+    if (symbol.declarations!.length !== 1) { //can I just delete this? (test first)
+        return true;
+    }
 
-    const parent = node.parent!;
-    const name = ts.getNameOfDeclaration(parent);
-    const x = name && checker.getSymbolAtLocation(name);
-    return !!x && x.declarations!.length !== 1;
+    const name = ts.getNameOfDeclaration(node.parent!);
+    const signatureSymbol = name === undefined ? undefined : checker.getSymbolAtLocation(name);
+    return signatureSymbol !== undefined && signatureSymbol.declarations!.length !== 1;
 }
 
 function isDeprecated(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
@@ -270,4 +272,65 @@ function isOverride(node: Tested, checker: ts.TypeChecker): boolean { //test
 function getThePropertySymbol(p: ts.ParameterDeclaration, checker: ts.TypeChecker) { //name
     return checker.getSymbolsOfParameterPropertyDeclaration(p, (p.name as ts.Identifier).text)
         .find(s => isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
+}
+
+
+function isTypeAndIsImplicitlyExported(node: Tested, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+    switch (node.kind) {
+        case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.InterfaceDeclaration:
+        case ts.SyntaxKind.EnumDeclaration:
+            return isTypeImplicitlyExported(checker.getSymbolAtLocation(node.name)!, sourceFile, checker);
+        default:
+            return false;
+    }
+}
+
+
+function isTypeImplicitlyExported(typeSymbol: ts.Symbol, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+    return sourceFile.forEachChild(function cb(child): boolean | undefined {
+        if (isImportLike(child)) {
+            return false;
+        }
+        const type = getImplicitType(child, checker);
+        // TODO: checker.typeEquals https://github.com/Microsoft/TypeScript/issues/13502
+        return type !== undefined && checker.typeToString(type) === checker.symbolToString(typeSymbol) || child.forEachChild(cb);
+    }) === true;
+}
+
+//mv
+/**
+ * Ignore this import if it's used as an implicit type somewhere.
+ * Workround for https://github.com/Microsoft/TypeScript/issues/9944
+ */
+export function isImportUsed(importSpecifier: ts.Identifier, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+    const importedSymbol = checker.getSymbolAtLocation(importSpecifier);
+    if (importedSymbol === undefined) {
+        return false;
+    }
+
+    const symbol = checker.getAliasedSymbol(importedSymbol);
+    if (!isSymbolFlagSet(symbol, ts.SymbolFlags.Type)) {
+        return false;
+    }
+
+    return isTypeImplicitlyExported(symbol, sourceFile, checker);
+}
+
+function getImplicitType(node: ts.Node, checker: ts.TypeChecker): ts.Type | undefined {
+    if ((ts.isPropertyDeclaration(node) || ts.isVariableDeclaration(node)) &&
+        node.type === undefined && node.name.kind === ts.SyntaxKind.Identifier ||
+        ts.isBindingElement(node) && node.name.kind === ts.SyntaxKind.Identifier) {
+        return checker.getTypeAtLocation(node);
+    } else if (isSignatureDeclaration(node) && node.type === undefined) {
+        const sig = checker.getSignatureFromDeclaration(node);
+        return sig === undefined ? undefined : sig.getReturnType();
+    } else {
+        return undefined;
+    }
+}
+
+export type ImportLike = ts.ImportDeclaration | ts.ImportEqualsDeclaration;
+export function isImportLike(node: ts.Node): node is ImportLike {
+    return node.kind === ts.SyntaxKind.ImportDeclaration || node.kind === ts.SyntaxKind.ImportEqualsDeclaration;
 }

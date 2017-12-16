@@ -24,10 +24,6 @@ export type ExclusionDescriptor = IBlockExclusionDescriptor | IClassExclusionDes
 
 export type InputExclusionDescriptor = boolean | ExclusionDescriptor;
 
-export interface IExclusionDescriptors {
-    [type: string /* DocType */]: ExclusionDescriptor;
-}
-
 export type IInputExclusionDescriptors = DocType | {
     [type: string /* DocType */]: InputExclusionDescriptor;
 };

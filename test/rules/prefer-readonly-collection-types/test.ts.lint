@@ -1,8 +1,2 @@
-class C {
-    x: string[];
-}
-interface I {
-    x: string[];
-}
-const i: I = new C();
-i.x.push("");
+const x: number[] = [];
+x.push(0)

@@ -57,134 +57,51 @@ export class Rule extends Lint.Rules.TypedRule {
 function walk(ctx: Lint.WalkContext<void>, info: AnalysisResult, checker: ts.TypeChecker): void {
     ctx.sourceFile.forEachChild(function cb(node) {
         if (isTested(node)) {
-            foo(node);
+            check(node);
         }
         node.forEachChild(cb);
     });
 
-    function foo(node: Tested): void {//name
+    function check(node: Tested): void {
         const symbol = checker.getSymbolAtLocation(node.name)!;
-        if (isOkToNotUse(node, symbol, checker, new Set())) { //todo: ignorenames
+        if (isOkToNotUse(node, symbol, checker, new Set())) {
             return;
         }
 
-        //If it's an array, check use
-        //todo: map and set too
-        //todo: unions too
-        //todo: would like a type checker api...
-        //const actualType = this.checker.getTypeAtLocation(node.name);
-        //if (this.checker.typeToString(actualType).endsWith("[]")) {
         const typeNode = getTypeNode(node);
-        const x = typeNode && getMutableCollectionType(typeNode);
-        if (!x) {
+        const mutableTypeInfo = typeNode === undefined ? undefined : getMutableCollectionType(typeNode);
+        if (mutableTypeInfo === undefined) {
             return;
         }
 
-        const y = info.symbolInfos.get(symbol)!;
-        if (y.everUsedAsMutableCollection()) {
+        const symbolInfo = info.symbolInfos.get(symbol)!;
+        if (symbolInfo.everUsedAsMutableCollection()) {
             return;
         }
 
         //For a property: but this type might be assigned to another type, and that other type might have this property mutable (test)
-        //todo: also for method
-        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property) && isPropertyAssignedToMutableCollection(symbol, checker, info)) {
+        //todo: also for method (test)
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property)
+            && info.isPropertyAssignedToMutableCollection(symbol, checker)) {
             return;
         }
 
-        ctx.addFailureAtNode(x.node, `Prefer Readonly${x.name}`);
+        ctx.addFailureAtNode(mutableTypeInfo.typeNode, `Prefer Readonly${mutableTypeInfo.typeName}`);
     }
 }
 
-//method in AnalysisResult
-function isPropertyAssignedToMutableCollection(symbol: ts.Symbol, checker: ts.TypeChecker, info: AnalysisResult): boolean {
-    const targets = info.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
-    if (!targets) {
-        return false;
-    }
-
-    for (const target of targets) {
-        const targetProperty = checker.getPropertyOfType(target, symbol.name);
-        if (targetProperty) {
-            //test
-            if (!allowsReadonlyCollectionType(checker.getDeclaredTypeOfSymbol(targetProperty))) {
-                return true;
-            }
-        }
-    }
-
-    return false;
+const x = new Set(["Array", "Set", "Map"]);//name
+function getMutableCollectionType(typeNode: ts.TypeNode): { readonly typeNode: ts.TypeNode, readonly typeName: string } | undefined {
+    return ts.isUnionTypeNode(typeNode)
+        //Report errors if `string | string[]` is used immutably (should be `string | ReadonlyArray<string>`) (test)
+        ? find(typeNode.types, getMutableCollectionType)
+        : ts.isArrayTypeNode(typeNode)
+        ? { typeNode, typeName: "Array" }
+        : ts.isTypeReferenceNode(typeNode) && typeNode.typeName.kind === ts.SyntaxKind.Identifier && x.has(typeNode.typeName.text)
+        ? { typeNode, typeName: typeNode.typeName.text }
+        : undefined;
 }
 
-//mv to analysisresult class
-export function isPropertyAssignedIndirectly(symbol: ts.Symbol, checker: ts.TypeChecker, info: AnalysisResult): boolean {
-    //find things that are assigned to this type.
-    const sources = info.typeAssignmentsTargetToSource.get(getTypeContainingProperty(symbol, checker));
-    if (!sources) {
-        return false;
-    }
-
-    for (const source of sources) {//name
-        if (source.flags & ts.TypeFlags.Any) {
-            return true;
-        }
-        else {
-            const sourceProperty = checker.getPropertyOfType(source, symbol.name);
-            if (sourceProperty) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-export function getParentOfPropertySymbol(symbol: ts.Symbol): ts.Symbol {
-    return (symbol as any).parent;
-}
-
-//todo; better
-function getTypeContainingProperty(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Type {
-    const parentSymbol = (symbol as any).parent as ts.Symbol;
-    return checker.getTypeAtLocation(parentSymbol.declarations![0]);
-
-    /*for (const d of symbol.declarations!) {
-        if (ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) {
-            const parent = d.parent as ts.ClassDeclaration | ts.ClassExpression | ts.InterfaceDeclaration | ts.TypeLiteralNode;
-            switch (parent.kind) {
-                case ts.SyntaxKind.ClassDeclaration:
-                case ts.SyntaxKind.ClassExpression:
-                case ts.SyntaxKind.InterfaceDeclaration:
-                case ts.SyntaxKind.TypeLiteral:
-                    break;
-                default:
-                    throw new Error(); //!
-            }
-            checker.getSymbolAtLocation(ts.isTypeLiteralNode(parent) ? parent : parent.name);
-            checker.getTypeAtLocation(parent.name!);
-        }
-    }*/
-}
-
-const x = new Set(["Array", "Set", "Map"]);
-function getMutableCollectionType(node: ts.TypeNode): { readonly node: ts.TypeNode, readonly name: string } | undefined {
-    if (ts.isUnionTypeNode(node)) {
-        //Report errors if `string | string[]` is used immutably (should be `string | ReadonlyArray<string>`)
-        return find(node.types, getMutableCollectionType);
-    }
-    else if (ts.isArrayTypeNode(node)) {
-        return { node, name: "Array" };
-    }
-    else if (ts.isTypeReferenceNode(node) && node.typeName.kind === ts.SyntaxKind.Identifier && x.has(node.typeName.text)) {
-        return { node, name: node.typeName.text };
-    }
-    return undefined;
-}
-
-function allowsReadonlyCollectionType(type: ts.Type): boolean {
-    if (type.flags & ts.TypeFlags.Union) {//preferconditional
-        return (type as ts.UnionType).types.some(allowsReadonlyCollectionType);
-    }
-    return type.symbol !== undefined && type.symbol.name.startsWith("Readonly");
-}
 
 //test: that we handle unions
 function getTypeNode(node: Tested): ts.TypeNode | undefined {
@@ -205,6 +122,7 @@ function getTypeNode(node: Tested): ts.TypeNode | undefined {
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.EnumDeclaration:
         case ts.SyntaxKind.InterfaceDeclaration:
+        case ts.SyntaxKind.ModuleDeclaration:
             return undefined;
         default:
             throw new Error(`TODO: handle ${ts.SyntaxKind[node.kind]}`)

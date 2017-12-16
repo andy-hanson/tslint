@@ -83,7 +83,7 @@ export function loadRules(ruleOptionsList: ReadonlyArray<IOptions>,
     return rules;
 }
 
-export function findRule(name: string, rulesDirectories?: string | string[]): RuleConstructor | undefined {//should be readonly input
+export function findRule(name: string, rulesDirectories?: string | ReadonlyArray<string>): RuleConstructor | undefined {
     const camelizedName = transformName(name);
     // first check for core rules
     const Rule = loadCachedRule(CORE_RULES_DIRECTORY, camelizedName);
@@ -110,9 +110,9 @@ function loadRule(directory: string, ruleName: string): RuleConstructor | "not-f
     const ruleFullPath = getRuleFullPath(directory, ruleName);
     if (ruleFullPath !== undefined) {
         const ruleModule = require(ruleFullPath) as { readonly Rule: RuleConstructor };
-        //if (ruleModule !== undefined) {
+        if (ruleModule !== undefined) {
             return ruleModule.Rule;
-        //}
+        }
     }
     return "not-found";
 }

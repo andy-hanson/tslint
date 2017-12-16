@@ -19,11 +19,10 @@ import { isFunctionScopeBoundary, isIdentifier } from "tsutils";
 import * as ts from "typescript";
 import * as Lint from "../index";
 
+const DEFAULT_THRESHOLD = 20;
+const MINIMUM_THRESHOLD = 2;
+
 export class Rule extends Lint.Rules.AbstractRule {
-
-    private static readonly DEFAULT_THRESHOLD = 20;
-    private static readonly MINIMUM_THRESHOLD = 2;
-
     /* tslint:disable:object-literal-sort-keys */
     public static metadata: Lint.IRuleMetadata = {
         ruleName: "cyclomatic-complexity",
@@ -45,10 +44,10 @@ export class Rule extends Lint.Rules.AbstractRule {
             errors or difficult to modify.`,
         optionsDescription: Lint.Utils.dedent`
             An optional upper limit for cyclomatic complexity can be specified. If no limit option
-            is provided a default value of ${Rule.DEFAULT_THRESHOLD} will be used.`,
+            is provided a default value of ${DEFAULT_THRESHOLD} will be used.`,
         options: {
             type: "number",
-            minimum: Rule.MINIMUM_THRESHOLD,
+            minimum: MINIMUM_THRESHOLD,
         },
         optionExamples: [true, [true, 20]],
         type: "maintainability",
@@ -67,7 +66,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 
     public isEnabled(): boolean {
         // Disable the rule if the option is provided but non-numeric or less than the minimum.
-        const isThresholdValid = typeof this.threshold === "number" && this.threshold >= Rule.MINIMUM_THRESHOLD;
+        const isThresholdValid = typeof this.threshold === "number" && this.threshold >= MINIMUM_THRESHOLD;
         return super.isEnabled() && isThresholdValid;
     }
 
@@ -75,7 +74,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         if (this.ruleArguments[0] !== undefined) {
             return this.ruleArguments[0] as number;
         }
-        return Rule.DEFAULT_THRESHOLD;
+        return DEFAULT_THRESHOLD;
     }
 }
 

@@ -20,9 +20,9 @@ import * as ts from "typescript";
 
 import * as Lint from "../index";
 
-export class Rule extends Lint.Rules.AbstractRule {
-    private static readonly DEFAULT_ALLOWED_BLANKS = 1;
+const DEFAULT_ALLOWED_BLANKS = 1;
 
+export class Rule extends Lint.Rules.AbstractRule {
     /* tslint:disable:object-literal-sort-keys */
     public static metadata: Lint.IRuleMetadata = {
         ruleName: "no-consecutive-blank-lines",
@@ -31,7 +31,7 @@ export class Rule extends Lint.Rules.AbstractRule {
         rationale: "Helps maintain a readable style in your codebase.",
         optionsDescription: Lint.Utils.dedent`
             An optional number of maximum allowed sequential blanks can be specified. If no value
-            is provided, a default of ${Rule.DEFAULT_ALLOWED_BLANKS} will be used.`,
+            is provided, a default of ${DEFAULT_ALLOWED_BLANKS} will be used.`,
         options: {
             type: "number",
             minimum: "1",
@@ -58,7 +58,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 
     public apply(sourceFile: ts.SourceFile): Lint.RuleFailure[] {
         const limit = this.ruleArguments[0] as number | undefined;
-        return this.applyWithFunction(sourceFile, walk, limit !== undefined ? limit : Rule.DEFAULT_ALLOWED_BLANKS);
+        return this.applyWithFunction(sourceFile, walk, limit !== undefined ? limit : DEFAULT_ALLOWED_BLANKS);
     }
 }
 

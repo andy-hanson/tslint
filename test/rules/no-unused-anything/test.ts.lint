@@ -1,5 +1,0 @@
-interface I {
-    readonly a: { readonly b: number }
-}
-declare const o: {};
-(o as I).a.b;

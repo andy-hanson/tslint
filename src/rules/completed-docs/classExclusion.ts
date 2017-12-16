@@ -29,7 +29,7 @@ export interface IClassExclusionDescriptor {
 }
 
 export class ClassExclusion extends Exclusion<IClassExclusionDescriptor> {
-    private readonly locations = this.createSet(this.descriptor.locations); //should detect: this should be ReadonlySet
+    private readonly locations = this.createSet(this.descriptor.locations);
     private readonly privacies = this.createSet(this.descriptor.privacies);
 
     public excludes(node: ts.Node) {

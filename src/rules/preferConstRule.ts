@@ -94,7 +94,7 @@ class Scope {
 }
 
 interface VariableInfo {
-    readonly identifier: ts.Identifier; //should be readonly, why don't we catch this?
+    readonly identifier: ts.Identifier;
     reassigned: boolean;
     readonly declarationInfo: DeclarationInfo;
     readonly destructuringInfo: DestructuringInfo | undefined;
@@ -191,7 +191,7 @@ class PreferConstWalker extends Lint.AbstractWalker<Options> {
                 this.handleExpression(node.left);
             }
 
-            if (boundary !== 0) {//utils.ScopeBoundary.None) {
+            if (boundary !== utils.ScopeBoundary.None) {
                 ts.forEachChild(node, cb);
                 this.onScopeEnd(savedScope);
                 this.scope = savedScope;

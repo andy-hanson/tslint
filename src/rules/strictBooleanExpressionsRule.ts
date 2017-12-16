@@ -288,8 +288,7 @@ function failureForKind(kind: TypeKind, isInUnion: boolean, options: Options): T
     }
 }
 
-//is unused externally...
-export type Location =
+type Location =
     | ts.PrefixUnaryExpression
     | ts.IfStatement
     | ts.WhileStatement

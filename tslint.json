@@ -7,8 +7,7 @@
     "no-unused-anything": [true, {
       "ignoreNames": ["metadata"]
     }],
-    "prefer-readonly-collection-types": true/*,
-
+    "prefer-readonly-collection-types": true,
 
     // Don't want these
     "cyclomatic-complexity": false,
@@ -72,6 +71,5 @@
       "allow-leading-underscore",
       "allow-pascal-case"
     ]
-    */
   }
 }

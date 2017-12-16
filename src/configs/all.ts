@@ -272,6 +272,7 @@ export const RULES_EXCLUDED_FROM_ALL_CONFIG =
     ["ban", "fileHeader", "importBlacklist", "noInvalidThis", "noSwitchCaseFallThrough", "typeofCompare"];
 
 // Exclude typescript-only rules from jsRules, otherwise it's identical.
+// tslint:disable-next-line no-unused-anything (loaded dynamically)
 export const jsRules: { [key: string]: any } = {};
 for (const key in rules) {
     if (!hasOwnProperty(rules, key)) {

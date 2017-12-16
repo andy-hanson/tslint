@@ -22,7 +22,7 @@ import * as Lint from "../index";
 
 interface Options {
     "call-signature"?: boolean;
-    "arrow-call-signature"?: boolean; //todo: no-unused-anything should handle strings
+    "arrow-call-signature"?: boolean;
     // tslint:disable-next-line no-unused-anything (TODO: this is unused!)
     parameter?: boolean;
     "arrow-parameter"?: boolean;

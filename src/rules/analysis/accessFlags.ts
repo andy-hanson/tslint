@@ -1,11 +1,28 @@
-import assert = require("assert");
+/**
+ * @license
+ * Copyright 2018 Palantir Technologies, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+ import assert = require("assert");
 import * as ts from "typescript";
 import { isSymbolFlagSet } from '../..';
 import { isAssignmentKind } from 'tsutils';
 
 export class SymbolInfo {
-    private = AccessFlags.None;
-    public = AccessFlags.None;
+    public private = AccessFlags.None;
+    public public = AccessFlags.None;
 
     //kill
     show() { //tslint:disable-line no-unused-anything
@@ -15,7 +32,8 @@ export class SymbolInfo {
     //todo: detect created-but-never-read
 
     everUsedAsMutableCollection(): boolean {
-        return hasAccessFlag(this.private, AccessFlags.ReadWithMutableType) || hasAccessFlag(this.public, AccessFlags.ReadWithMutableType);
+        return hasAccessFlag(this.private, AccessFlags.MutateCollectionEitherWay)
+            || hasAccessFlag(this.public, AccessFlags.MutateCollectionEitherWay);
     }
 
     everCreatedOrWritten(): boolean {
@@ -43,23 +61,17 @@ export const enum AccessFlags {
     None = 0,
     /** Only reads from a variable. */
     ReadReadonly = 2 ** 0,
-    /** Reads from the variable, but may mutate it. */
+    /** Assign this to a variable that's not a readonly collection. */
     ReadWithMutableType = 2 ** 1,
+    /** Call a method like `push()` that's *purely* a setter; we will detect collections that are *only* pushed to. */
+    MutateCollection = 2 ** 2,
     /** Only writes to a variable without using the result. E.g.: `x++;`. */
-    Write = 2 ** 2, //If this is a method, this will be ignored.
+    Write = 2 ** 3, //If this is a method, this will be ignored.
     /** Creates it */
-    Create = 2 ** 3,
+    Create = 2 ** 4,
 
     ReadEitherWay = ReadReadonly | ReadWithMutableType,
-}
-
-function showAccessFlags(f: AccessFlags) {
-    const s = [];
-    if (f & AccessFlags.ReadReadonly) s.push("ReadReadonly");
-    if (f & AccessFlags.ReadWithMutableType) s.push("ReadWithMutableType");
-    if (f & AccessFlags.Write) s.push("Write");
-    if (f & AccessFlags.Create) s.push("Create");
-    return s.length === 0 ? "None" : s.join();
+    MutateCollectionEitherWay = ReadWithMutableType | MutateCollection,
 }
 
 export function accessFlags(
@@ -97,11 +109,30 @@ class AccessFlagsChecker {
 
             case ts.SyntaxKind.PropertyAccessExpression: {
                 const { name } = parent as ts.PropertyAccessExpression;
-                return node === name
+                if (node === name) {
                     // Recurse to parent to see how the property is being used.
-                    ? this.work(parent as ts.PropertyAccessExpression, symbol, shouldAddAlias)
+                    return this.work(parent as ts.PropertyAccessExpression, symbol, shouldAddAlias);
+                } else {
                     // If the method name is e.g. "push" we aren't *writing* to the symbol, but we are writing to its *content*.
-                    : mutatingMethodNames.has(name.text) ? AccessFlags.ReadWithMutableType : AccessFlags.ReadReadonly;
+                    const c = getCollectionMutateKind(name.text);
+                    switch (c) {
+                        case CollectionMutateKind.None:
+                            return AccessFlags.ReadReadonly;
+                        case CollectionMutateKind.ReturnCollection:
+                            //since this returns the collection again, recurse on the parent
+                            //test
+                            return this.work(parent as ts.PropertyAccessExpression, symbol, shouldAddAlias) | AccessFlags.MutateCollection;
+                        case CollectionMutateKind.ReturnData:
+                            //gets data in addition to mutating the collection.
+                            return AccessFlags.ReadReadonly | AccessFlags.MutateCollection;
+                        case CollectionMutateKind.ReturnNonUseful:
+                            //returns the length of the collection, but if that's all you're getting, having the collection is stupid, so mark as readonly
+                            return AccessFlags.MutateCollection;
+                        default:
+                            assertNever(c);
+                    }
+                    //mutatingMethodNames.has(name.text) ? AccessFlags.MutateCollection : AccessFlags.ReadReadonly;
+                }
             }
 
             case ts.SyntaxKind.CallExpression: {
@@ -250,14 +281,23 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.ElementAccessExpression: {
                 const { expression, argumentExpression } = parent as ts.ElementAccessExpression;
                 if (node === argumentExpression) {
+                    //used as the index
                     return AccessFlags.ReadReadonly;
                 }
                 else {
                     assert(node === expression);
                     //don't add alias for the parent, and symbol shouldn't matter
-                    return this.work(parent as ts.ElementAccessExpression, undefined, /*shouldAddAlias*/ false) & AccessFlags.Write
-                        ? AccessFlags.ReadWithMutableType
-                        : AccessFlags.ReadReadonly;
+                    const parentFlags = this.work(parent as ts.ElementAccessExpression, undefined, /*shouldAddAlias*/ false);
+                    let flags = AccessFlags.None;
+                    if (parentFlags & AccessFlags.Write) {
+                        //writes an element of the array (test)
+                        flags |= AccessFlags.MutateCollection;
+                    }
+                    if (parentFlags & AccessFlags.ReadEitherWay) {
+                        //reads an element of the array (test)
+                        flags |= AccessFlags.ReadReadonly;
+                    }
+                    return flags;
                 }
             }
 
@@ -331,21 +371,33 @@ function writeOrReadWrite(node: ts.Node, symbol: ts.Symbol | undefined): AccessF
     return shouldRead ? flags | AccessFlags.ReadReadonly : flags;
 }
 
-const mutatingMethodNames: ReadonlySet<string> = new Set([
-    // Array
-    "copyWithin",
-    "pop",
-    "push",
-    "shift",
-    "sort",
-    "splice",
-    "unshift",
-    // Set / Map
-    "add",
-    "clear",
-    "delete",
-    "set",
-])
+const enum CollectionMutateKind {
+    None,
+    ReturnCollection,
+    ReturnData, //In addition to mutating the collection, returns info inside it
+    ReturnNonUseful, //e.g. 'push' returns the len, Set.add returns undefined.
+}
+function getCollectionMutateKind(name: string): CollectionMutateKind {
+    switch (name) {
+        case "copyWithin":
+        case "sort":
+        case "add": //from Set
+        case "set": //from Map
+            return CollectionMutateKind.ReturnCollection;
+        case "pop":
+        case "shift":
+        case "splice":
+        case "delete": //from Set/Map, returns whether delete succeeded
+            return CollectionMutateKind.ReturnData;
+        case "push": //returns array length
+        case "unshift": //ditto
+        case "clear": //returns undefined
+            return CollectionMutateKind.ReturnNonUseful;
+        default:
+            return CollectionMutateKind.None;
+    }
+}
+
 
 function isInOwnConstructor(node: ts.Node, symbol: ts.Symbol): boolean { //test
     const decl = symbol.valueDeclaration;
@@ -369,3 +421,16 @@ function isInOwnConstructor(node: ts.Node, symbol: ts.Symbol): boolean { //test
 //function isAssignmentOperator(token: ts.SyntaxKind): boolean {
 //    return token >= ts.SyntaxKind.FirstAssignment && token <= ts.SyntaxKind.LastAssignment;/
 //}
+
+export function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+    const values = map.get(key);
+    if (values === undefined) {
+        map.set(key, [value]);
+    } else {
+        values.push(value);
+    }
+}
+
+function assertNever(value: never): never {
+    throw new Error(value);
+}

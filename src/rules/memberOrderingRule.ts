@@ -387,7 +387,9 @@ function parseOptions(options: ReadonlyArray<any>): Options {
         : new MemberCategory(cat.name, new Set(flatMap(cat.kinds, memberKindFromName))));
     return { order, alphabetize };
 }
-function getOptionsJson(allOptions: ReadonlyArray<any>): { readonly order: ReadonlyArray<MemberCategoryJson>; readonly alphabetize: boolean } {
+function getOptionsJson(
+    allOptions: ReadonlyArray<any>,
+): { readonly order: ReadonlyArray<MemberCategoryJson>; readonly alphabetize: boolean } {
     if (allOptions == undefined || allOptions.length === 0 || allOptions[0] == undefined) {
         throw new Error("Got empty options");
     }

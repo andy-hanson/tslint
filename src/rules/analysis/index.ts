@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2016 Palantir Technologies, Inc.
+ * Copyright 2018 Palantir Technologies, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,9 +20,8 @@ import { hasModifier, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
 import * as ts from "typescript";
 
 import { getEqualsKind } from "../..";
-import { skipAlias } from "../noUnnecessaryQualifierRule";
-import { AccessFlags, accessFlags, SymbolInfo } from "./accessFlags";
-import { multiMapAdd } from '../../utils';
+import { AccessFlags, accessFlags, SymbolInfo, multiMapAdd } from "./accessFlags";
+import { skipAlias } from './moarUtils';
 
 const infoCache = new WeakMap<ts.Program, AnalysisResult>();
 export function getInfo(program: ts.Program): AnalysisResult {
@@ -78,12 +77,90 @@ export function isTested(node: ts.Node): node is Tested { //what does this mean?
         && node.name !== undefined && ts.isIdentifier(node.name);
 }*/
 
-export interface AnalysisResult {
-    readonly symbolInfos: ReadonlyMap<ts.Symbol, SymbolInfo>;
-    readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>;
-    readonly typeAssignmentsSourceToTarget: ReadonlyMap</*from*/ ts.Type, /*to*/ ReadonlyArray<ts.Type>>;
-    readonly typeAssignmentsTargetToSource: ReadonlyMap</*to*/ ts.Type, /*from*/ ReadonlyArray<ts.Type>>;
-    readonly castedToTypes: ReadonlySet<ts.Symbol>;
+export class AnalysisResult {
+    constructor(
+        readonly symbolInfos: ReadonlyMap<ts.Symbol, SymbolInfo>,
+        readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>,
+        readonly typeAssignmentsSourceToTarget: ReadonlyMap</*from*/ ts.Type, /*to*/ ReadonlyArray<ts.Type>>,
+        readonly typeAssignmentsTargetToSource: ReadonlyMap</*to*/ ts.Type, /*from*/ ReadonlyArray<ts.Type>>,
+        readonly castedToTypes: ReadonlySet<ts.Symbol>) {}
+
+    //method in AnalysisResult
+    isPropertyAssignedToMutableCollection(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+        const targets = this.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
+        if (!targets) {
+            return false;
+        }
+
+        for (const target of targets) {
+            const targetProperty = checker.getPropertyOfType(target, symbol.name);
+            if (targetProperty) {
+                //test
+                if (!allowsReadonlyCollectionType(checker.getDeclaredTypeOfSymbol(targetProperty))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    isPropertyAssignedIndirectly(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+        //find things that are assigned to this type.
+        const sources = this.typeAssignmentsTargetToSource.get(getTypeContainingProperty(symbol, checker));
+        if (!sources) {
+            return false;
+        }
+
+        for (const source of sources) {//name
+            if (source.flags & ts.TypeFlags.Any) {
+                return true;
+            }
+            else {
+                const sourceProperty = checker.getPropertyOfType(source, symbol.name);
+                if (sourceProperty) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+}
+
+function allowsReadonlyCollectionType(type: ts.Type): boolean {
+    if (type.flags & ts.TypeFlags.Union) {//preferconditional
+        return (type as ts.UnionType).types.some(allowsReadonlyCollectionType);
+    }
+    return type.symbol !== undefined && type.symbol.name.startsWith("Readonly");
+}
+
+//mv
+export function getParentOfPropertySymbol(symbol: ts.Symbol): ts.Symbol {
+    return (symbol as any).parent;
+}
+
+//todo; better
+function getTypeContainingProperty(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Type {
+    const parentSymbol = (symbol as any).parent as ts.Symbol;
+    return checker.getTypeAtLocation(parentSymbol.declarations![0]);
+
+    /*for (const d of symbol.declarations!) {
+        if (ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) {
+            const parent = d.parent as ts.ClassDeclaration | ts.ClassExpression | ts.InterfaceDeclaration | ts.TypeLiteralNode;
+            switch (parent.kind) {
+                case ts.SyntaxKind.ClassDeclaration:
+                case ts.SyntaxKind.ClassExpression:
+                case ts.SyntaxKind.InterfaceDeclaration:
+                case ts.SyntaxKind.TypeLiteral:
+                    break;
+                default:
+                    throw new Error(); //!
+            }
+            checker.getSymbolAtLocation(ts.isTypeLiteralNode(parent) ? parent : parent.name);
+            checker.getTypeAtLocation(parent.name!);
+        }
+    }*/
 }
 
 class Analyzer {
@@ -109,13 +186,12 @@ class Analyzer {
             }
         });
 
-        return {
-            symbolInfos: this.symbolInfos,
-            enumMembers: this.enumMembers,
-            typeAssignmentsSourceToTarget: this.typeAssignmentsSourceToTarget,
-            typeAssignmentsTargetToSource: this.typeAssignmentsTargetToSource,
-            castedToTypes: this.castedToTypes
-        };
+        return new AnalysisResult(
+            this.symbolInfos,
+            this.enumMembers,
+            this.typeAssignmentsSourceToTarget,
+            this.typeAssignmentsTargetToSource,
+            this.castedToTypes);
     }
 
     analyze(node: ts.Node, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
@@ -207,7 +283,7 @@ class Analyzer {
         const access = accessFlags(node, symbol, this.checker,
             aliasId => this.addAlias(aliasId, symbol),
             (a, b) => this.addTypeAssignment(a, b));
-        if (isPublicAccess(symbol, currentFile, currentClass)) {
+        if (isPublicAccess(node, symbol, currentFile, currentClass)) {
             info.public |= access;
         } else {
             info.private |= access;
@@ -318,12 +394,18 @@ function isTypeReference(type: ts.Type): type is ts.TypeReference {
     return !!(type.flags & ts.TypeFlags.Object) && !!((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Reference);
 }
 
-function isPublicAccess(symbol: ts.Symbol, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
+function isPublicAccess(
+    node: ts.Identifier,
+    symbol: ts.Symbol,
+    currentFile: ts.SourceFile,
+    currentClass: ts.ClassLikeDeclaration | undefined,
+): boolean {
     for (const decl of symbol.declarations!) {
         if (hasModifier(decl.modifiers, ts.SyntaxKind.ExportKeyword)) {
             const parent = decl.parent!;
             if (ts.isSourceFile(parent)) {
-                return parent !== currentFile;
+                return parent !== currentFile
+                    || isSymbolFlagSet(symbol, ts.SymbolFlags.Type) && isPublicTypeUse(node);
             }
         }
         if (ts.isClassElement(decl)) {
@@ -337,8 +419,20 @@ function isPublicAccess(symbol: ts.Symbol, currentFile: ts.SourceFile, currentCl
     return true;
 }
 
-//this is unused, why don't we catch it
-export type PropertyDeclarationLike = ts.PropertyDeclaration | ts.ParameterDeclaration | ts.PropertySignature;
+function isPublicTypeUse(node: ts.Identifier) {
+    const parent = node.parent!;
+    if (isTested(parent) && parent.name === node) {
+        //the original declaration isn't a public use...
+        return false;
+    }
+    return isPublicTypeUseWorker(node);
+}
+
+function isPublicTypeUseWorker(node: ts.Node): boolean {
+    //true if we're inside of a type or function.
+    return node.kind !== ts.SyntaxKind.SourceFile
+        && (hasModifier(node.modifiers, ts.SyntaxKind.ExportKeyword) || isPublicTypeUseWorker(node.parent!));
+}
 
 function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: () => V): V {
     const already = map.get(key); //name

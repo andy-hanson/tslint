@@ -79,111 +79,111 @@ export type Visibility = All
     | typeof VISIBILITY_EXPORTED
     | typeof VISIBILITY_INTERNAL;
 
+const defaultArguments: IInputExclusionDescriptors = {
+    [ARGUMENT_CLASSES]: true,
+    [ARGUMENT_FUNCTIONS]: true,
+    [ARGUMENT_METHODS]: {
+        [DESCRIPTOR_TAGS]: {
+            [TAGS_FOR_CONTENT]: {
+                see: ".*",
+            },
+            [TAGS_FOR_EXISTENCE]: [
+                "deprecated",
+                "inheritdoc",
+            ],
+        },
+    },
+    [ARGUMENT_PROPERTIES]: {
+        [DESCRIPTOR_TAGS]: {
+            [TAGS_FOR_CONTENT]: {
+                see: ".*",
+            },
+            [TAGS_FOR_EXISTENCE]: [
+                "deprecated",
+                "inheritdoc",
+            ],
+        },
+    },
+};
+
+const ARGUMENT_DESCRIPTOR_BLOCK = {
+    properties: {
+        [DESCRIPTOR_TAGS]: {
+            properties: {
+                [TAGS_FOR_CONTENT]: {
+                    items: {
+                        type: "string",
+                    },
+                    type: "object",
+                },
+                [TAGS_FOR_EXISTENCE]: {
+                    items: {
+                        type: "string",
+                    },
+                    type: "array",
+                },
+            },
+        },
+        [DESCRIPTOR_VISIBILITIES]: {
+            enum: [
+                ALL,
+                VISIBILITY_EXPORTED,
+                VISIBILITY_INTERNAL,
+            ],
+            type: "string",
+        },
+    },
+    type: "object",
+};
+
+const ARGUMENT_DESCRIPTOR_CLASS = {
+    properties: {
+        [DESCRIPTOR_TAGS]: {
+            properties: {
+                [TAGS_FOR_CONTENT]: {
+                    items: {
+                        type: "string",
+                    },
+                    type: "object",
+                },
+                [TAGS_FOR_EXISTENCE]: {
+                    items: {
+                        type: "string",
+                    },
+                    type: "array",
+                },
+            },
+        },
+        [DESCRIPTOR_LOCATIONS]: {
+            enum: [
+                ALL,
+                LOCATION_INSTANCE,
+                LOCATION_STATIC,
+            ],
+            type: "string",
+        },
+        [DESCRIPTOR_PRIVACIES]: {
+            enum: [
+                ALL,
+                PRIVACY_PRIVATE,
+                PRIVACY_PROTECTED,
+                PRIVACY_PUBLIC,
+            ],
+            type: "string",
+        },
+    },
+    type: "object",
+};
+
 export class Rule extends Lint.Rules.TypedRule {
     public static readonly FAILURE_STRING_EXIST = "Documentation must exist for ";
-
-    private static readonly defaultArguments: IInputExclusionDescriptors = {
-        [ARGUMENT_CLASSES]: true,
-        [ARGUMENT_FUNCTIONS]: true,
-        [ARGUMENT_METHODS]: {
-            [DESCRIPTOR_TAGS]: {
-                [TAGS_FOR_CONTENT]: {
-                    see: ".*",
-                },
-                [TAGS_FOR_EXISTENCE]: [
-                    "deprecated",
-                    "inheritdoc",
-                ],
-            },
-        },
-        [ARGUMENT_PROPERTIES]: {
-            [DESCRIPTOR_TAGS]: {
-                [TAGS_FOR_CONTENT]: {
-                    see: ".*",
-                },
-                [TAGS_FOR_EXISTENCE]: [
-                    "deprecated",
-                    "inheritdoc",
-                ],
-            },
-        },
-    };
-
-    private static readonly ARGUMENT_DESCRIPTOR_BLOCK = {
-        properties: {
-            [DESCRIPTOR_TAGS]: {
-                properties: {
-                    [TAGS_FOR_CONTENT]: {
-                        items: {
-                            type: "string",
-                        },
-                        type: "object",
-                    },
-                    [TAGS_FOR_EXISTENCE]: {
-                        items: {
-                            type: "string",
-                        },
-                        type: "array",
-                    },
-                },
-            },
-            [DESCRIPTOR_VISIBILITIES]: {
-                enum: [
-                    ALL,
-                    VISIBILITY_EXPORTED,
-                    VISIBILITY_INTERNAL,
-                ],
-                type: "string",
-            },
-        },
-        type: "object",
-    };
-
-    private static readonly ARGUMENT_DESCRIPTOR_CLASS = {
-        properties: {
-            [DESCRIPTOR_TAGS]: {
-                properties: {
-                    [TAGS_FOR_CONTENT]: {
-                        items: {
-                            type: "string",
-                        },
-                        type: "object",
-                    },
-                    [TAGS_FOR_EXISTENCE]: {
-                        items: {
-                            type: "string",
-                        },
-                        type: "array",
-                    },
-                },
-            },
-            [DESCRIPTOR_LOCATIONS]: {
-                enum: [
-                    ALL,
-                    LOCATION_INSTANCE,
-                    LOCATION_STATIC,
-                ],
-                type: "string",
-            },
-            [DESCRIPTOR_PRIVACIES]: {
-                enum: [
-                    ALL,
-                    PRIVACY_PRIVATE,
-                    PRIVACY_PROTECTED,
-                    PRIVACY_PUBLIC,
-                ],
-                type: "string",
-            },
-        },
-        type: "object",
-    };
 
     /* tslint:disable:object-literal-sort-keys */
     public static metadata: Lint.IRuleMetadata = {
         ruleName: "completed-docs",
         description: "Enforces documentation for important items be filled out.",
         optionsDescription: Lint.Utils.dedent`
-            \`true\` to enable for [${Object.keys(Rule.defaultArguments).join(", ")}]],
+            \`true\` to enable for [${Object.keys(defaultArguments).join(", ")}]],
             or an array with each item in one of two formats:
 
             * \`string\` to enable for that type
@@ -240,16 +240,16 @@ export class Rule extends Lint.Rules.TypedRule {
                     {
                         type: "object",
                         properties: {
-                            [ARGUMENT_CLASSES]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
-                            [ARGUMENT_ENUMS]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
-                            [ARGUMENT_ENUM_MEMBERS]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
-                            [ARGUMENT_FUNCTIONS]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
-                            [ARGUMENT_INTERFACES]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
-                            [ARGUMENT_METHODS]: Rule.ARGUMENT_DESCRIPTOR_CLASS,
-                            [ARGUMENT_NAMESPACES]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
-                            [ARGUMENT_PROPERTIES]: Rule.ARGUMENT_DESCRIPTOR_CLASS,
-                            [ARGUMENT_TYPES]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
-                            [ARGUMENT_VARIABLES]: Rule.ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_CLASSES]: ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_ENUMS]: ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_ENUM_MEMBERS]: ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_FUNCTIONS]: ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_INTERFACES]: ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_METHODS]: ARGUMENT_DESCRIPTOR_CLASS,
+                            [ARGUMENT_NAMESPACES]: ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_PROPERTIES]: ARGUMENT_DESCRIPTOR_CLASS,
+                            [ARGUMENT_TYPES]: ARGUMENT_DESCRIPTOR_BLOCK,
+                            [ARGUMENT_VARIABLES]: ARGUMENT_DESCRIPTOR_BLOCK,
                         },
                     },
                 ],
@@ -298,7 +298,7 @@ export class Rule extends Lint.Rules.TypedRule {
 
     private getExclusionsMap(ruleArguments: ReadonlyArray<DocType | IInputExclusionDescriptors>): ExclusionsMap {
         if (ruleArguments.length === 0) {
-            ruleArguments = [Rule.defaultArguments];
+            ruleArguments = [defaultArguments];
         }
 
         return this.exclusionFactory.constructExclusionsMap(ruleArguments);
