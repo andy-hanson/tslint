@@ -301,12 +301,7 @@ class Analyzer {
         }
 
         const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
-        const access = accessFlags(node, symbol, this.checker,
-            aliasId => this.addAlias(aliasId, symbol),
-            //todo: probably don't need to pass that in since we handle that in the `isExpression` block in `analyze`
-            (a, b) => {
-                this.addTypeAssignment(a, b)
-            }); //neater
+        const access = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
         if (isPublicAccess(node, symbol, currentFile, currentClass)) {
             info.public |= access;
         } else {

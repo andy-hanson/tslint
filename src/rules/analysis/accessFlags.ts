@@ -90,18 +90,11 @@ export function accessFlags(
     symbol: ts.Symbol,
     checker: ts.TypeChecker,
     addAlias: (id: ts.Identifier) => void,
-    addTypeAssignment: (to: ts.Type, from: ts.Type) => void,//kill?
 ): AccessFlags {
-    return new AccessFlagsChecker(checker, addAlias, addTypeAssignment).work(node, symbol, true);
+    return new AccessFlagsChecker(checker, addAlias).work(node, symbol, true);
 }
 class AccessFlagsChecker {
-    constructor(
-        private readonly checker: ts.TypeChecker,
-        //
-        private readonly addAlias: (id: ts.Identifier) => void,
-        //shouldn't be here because this is only called on identifiers, do in loop in index.ts
-        private readonly addTypeAssignment: (to: ts.Type, from: ts.Type) => void,
-    ) {}
+    constructor(private readonly checker: ts.TypeChecker, private readonly addAlias: (id: ts.Identifier) => void) {}
 
     public work(node: ts.Expression, symbol: ts.Symbol | undefined, shouldAddAlias: boolean): AccessFlags {
         const parent = node.parent!;
@@ -328,6 +321,7 @@ class AccessFlagsChecker {
         // In all other locations: if provided to a context with a readonly type, not a mutable use.
         // `function f(): ReadonlyArray<number> { return x; }` uses `x` readonly, `funciton f(): number[]` does not.
         const contextualType = this.checker.getContextualType(node); //uncast
+        //preferconditional
         if (contextualType === undefined) {
             // If there's no contextual type, be pessimistic.
             //but for variable declaration be optimistic because we just added an alias (test)
@@ -336,7 +330,6 @@ class AccessFlagsChecker {
             // Assume that it's OK to pass a readonly collection to 'any'
             return AccessFlags.ReadReadonly;
         } else {
-            this.addTypeAssignment(/*to*/ contextualType, /*from*/ this.checker.getTypeAtLocation(node));
             return !isReadonlyType(contextualType) ? AccessFlags.ReadWithMutableType : AccessFlags.ReadReadonly;
         }
     }
