@@ -44,7 +44,7 @@ describe("JSON Formatter", () => {
         ];
 
         /* tslint:disable:object-literal-sort-keys */
-        const expectedResult: IRuleFailureJson[] = [
+        const expectedResult: ReadonlyArray<IRuleFailureJson> = [
             {
                 name: TEST_FILE,
                 failure: "first failure",

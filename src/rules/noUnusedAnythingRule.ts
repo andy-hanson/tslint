@@ -16,14 +16,14 @@
  */
 
 import assert = require("assert");
-import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind, isSignatureDeclaration } from "tsutils";
+import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind, isSignatureDeclaration, isUnionOrIntersectionType } from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
 
 import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, canBePrivate, isTypeReference } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
-import { getSymbolDeprecation } from './analysis/moarUtils';
+import { getDeprecationFromDeclaration } from './analysis/moarUtils';
 import { AccessFlags, SymbolInfo, isMutableCollectionTypeName, isMutableCollectionTypeNameStr } from './analysis/accessFlags';
 import { find } from '../utils';
 
@@ -165,69 +165,53 @@ class Walker extends Lint.AbstractWalker<Options> {
     }
 
     private checkSymbolUses(node: Tested, symbol: ts.Symbol, info: SymbolInfo): void {
+        const fail = (f: string): void => { this.addFailureAtNode(node.name, f); };
+
         if (!info.everUsedPublicly()) {
             const x = canBePrivate(node);
             if (x === undefined) {
-                this.addFailureAtNode(node.name, "Analysis found no uses of this symbol.");
-                return;
+                fail("Analysis found no uses of this symbol.");
             } else if (ts.isSourceFile(x)) {
                 if (!isIsImplicitlyExported(node, this.sourceFile, this.checker)) { //test implicit exports
-                    this.addFailureAtNode(node.name, "Analysis found no uses in other modules; this should not be exported.");
-                    return;
+                    fail("Analysis found no uses in other modules; this should not be exported.");
                 }
             } else {
                 //todo: test that we handle completely unused abstract method
                 if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)
                     //may need to be public due to assigning this to an interface
                     && !this.info.isPropertyUsedForAssignment(symbol, this.checker)) {
-                    this.addFailureAtNode(node.name, "Analysis found no public uses; this should be private.");
-                    return;
+                    fail("Analysis found no public uses; this should be private.");
                 }
             }
             return;
-        }
-
-        if (!info.everRead()) {
+        } else if (!info.everRead()) {
             //might be a fn used for a side effect.
             if (info.everUsedForSideEffect() && isFunctionLike(symbol)) {
                 const sig = this.checker.getSignatureFromDeclaration(symbol.valueDeclaration as ts.SignatureDeclaration)!;
                 if (!(this.checker.getReturnTypeOfSignature(sig).flags & ts.TypeFlags.Void)) {
-                    this.addFailureAtNode(node.name, "This function is used for its side effect, but the return value is never used.");
+                    fail("This function is used for its side effect, but the return value is never used.");
                 }
             } else {
                 if (info.mutatesCollection()) {
                     if (!info.has(AccessFlags.CreateAlias)) {
-                        this.addFailureAtNode(
-                            node.name,
-                            "This collection is created and filled with values, but never read from.");
+                        fail("This collection is created and filled with values, but never read from.");
                     }
                 }
                 else {
                     if (!this.info.isPropertyUsedForAssignment(symbol, this.checker)) {
-                        this.addFailureAtNode(
-                            node.name,
-                            "This symbol is given a value, but analysis found no reads. This is likely dead code.");
+                        fail("This symbol is given a value, but analysis found no reads. This is likely dead code.");
                     }
                 }
             }
-            return;
+        } else if (!info.everWritten() && isMutable(node)) {
+            fail(ts.isVariableDeclaration(node)
+                ? "Analysis found no mutable uses of this variable; use `const`." //tests
+                : "Analysis found no writes to this property; mark it as `readonly`.");
+        } else if (
+            !info.everCreatedOrWritten()
+            && !this.info.symbolIsPropertyOfTypeAssignedToSomehow(symbol, this.checker)) {
+            fail("Analysis found places where this is read, but found no places where it is given a value.");
         }
-
-        if (!info.everWritten() && isMutable(node)) {
-            this.addFailureAtNode(
-                node.name,
-                ts.isVariableDeclaration(node)
-                    ? "Analysis found no mutable uses of this variable; use `const`."
-                    : "Analysis found no writes to this property; mark it as `readonly`.");
-        }
-
-        if (!info.everCreatedOrWritten() && !this.info.symbolIsPropertyOfTypeAssignedToSomehow(symbol, this.checker)) {
-            this.addFailureAtNode(
-                node.name,
-                "Analysis found places where this is read, but found no places where it is given a value.");
-        }
-
-        //todo: test that we warn for something never used at all...
     }
 
     private checkCollectionUses(node: Tested, symbol: ts.Symbol, symbolInfo: SymbolInfo): void {
@@ -236,7 +220,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         }
 
         const typeNode = getTypeNode(node);
-        let info = typeNode === undefined
+        const info = typeNode === undefined
             ? shouldTypeReadonlyCollectionWithInferredType(node)
                 ? getMutableCollectionTypeFromType(this.checker.getTypeAtLocation(node.name))
                 : undefined
@@ -283,8 +267,8 @@ function shouldTypeReadonlyCollectionWithInferredType(node: Tested): boolean {//
 
 //returns the type name
 function getMutableCollectionTypeFromType(type: ts.Type): string | undefined {
-    if (type.flags & ts.TypeFlags.UnionOrIntersection) { //isUnionType helper
-        return find((type as ts.UnionOrIntersectionType).types, getMutableCollectionTypeFromType);
+    if (isUnionOrIntersectionType(type)) { //isUnionType helper
+        return find(type.types, getMutableCollectionTypeFromType);
     }
     if (isTypeReference(type)) {
         const { symbol } = type.target;
@@ -294,11 +278,10 @@ function getMutableCollectionTypeFromType(type: ts.Type): string | undefined {
     }
     return undefined;
 }
-
 //mostly dup of above, break out a utility?
 export function isReadonlyType(type: ts.Type): boolean {
-    if (type.flags & ts.TypeFlags.UnionOrIntersection) { //isUnionType helper
-        return (type as ts.UnionOrIntersectionType).types.some(isReadonlyType);
+    if (isUnionOrIntersectionType(type)) {
+        return type.types.some(isReadonlyType);
     }
     if (isTypeReference(type)) {
         const { symbol } = type.target;
@@ -366,7 +349,7 @@ function isMutable(node: Tested): boolean {
 function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
     return isAmbient(node)
         || isIgnored(node)
-        || isDeprecated(node, symbol, checker)
+        || isDeprecated(node)
         || isOverload(node, symbol, checker)
         || isOverride(node, checker)
         || ignoreNames.has(node.name.text);
@@ -395,8 +378,10 @@ function isOverload(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): b
 
 //test: for parameter property in deprecated class
 //really, all we care is that some parent node has an `@deprecated` commment, why bother w/ symbols here...
-function isDeprecated(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-    if (isItDeprecated(symbol)) {
+function isDeprecated(node: ts.Node): boolean {
+    return !ts.isSourceFile(node) && (getDeprecationFromDeclaration(node) !== undefined || isDeprecated(node.parent!));
+
+    /*if (isItDeprecated(symbol)) {
         return true;
     }
     // If the class is deprecated, all of its methods are too.
@@ -407,6 +392,8 @@ function isDeprecated(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker):
 }
 function isItDeprecated(symbol: ts.Symbol): boolean { //name
     return getSymbolDeprecation(symbol) !== undefined;
+}
+*/
 }
 
 function isOverride(node: Tested, checker: ts.TypeChecker): boolean { //test

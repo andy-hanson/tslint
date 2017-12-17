@@ -70,9 +70,9 @@ function hasAccessFlag(a: AccessFlags, b: AccessFlags): boolean {
     return !!(a & b);
 }
 
-
-
-function showAccessFlags(f: AccessFlags) {//kill
+//kill
+// tslint:disable
+function showAccessFlags(f: AccessFlags) {
     const s = [];
     if (f & AccessFlags.ReadReadonly) s.push("ReadReadonly");
     if (f & AccessFlags.ReadWithMutableType) s.push("ReadWithMutableType");
@@ -83,6 +83,7 @@ function showAccessFlags(f: AccessFlags) {//kill
     if (f & AccessFlags.SideEffect) s.push("CreateSideEffect");
     return s.length === 0 ? "None" : s.join();
 }
+// tslint:enable
 
 export const enum AccessFlags {
     None = 0,
@@ -124,7 +125,7 @@ class AccessFlagsChecker {
         private readonly addTypeAssignment: (to: ts.Type, from: ts.Type) => void,
     ) {}
 
-    work(node: ts.Expression, symbol: ts.Symbol | undefined, shouldAddAlias: boolean): AccessFlags {
+    public work(node: ts.Expression, symbol: ts.Symbol | undefined, shouldAddAlias: boolean): AccessFlags {
         const parent = node.parent!;
         switch (parent.kind) {
             case ts.SyntaxKind.AsExpression:
@@ -196,7 +197,6 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.ExpressionStatement:
                 return AccessFlags.SideEffect;
 
-            case ts.SyntaxKind.BindingElement:
             case ts.SyntaxKind.ComputedPropertyName:
             case ts.SyntaxKind.IfStatement:
             case ts.SyntaxKind.AwaitExpression:
@@ -358,11 +358,17 @@ class AccessFlagsChecker {
                 const { name, initializer } = parent as ts.PropertyAssignment;
                 return name === node ? createFlag(initializer) : this.fromContext(initializer);
             }
+
             case ts.SyntaxKind.BindingElement:
+                //we might be reading it for a mutable type...
+                //todo: actually create an alias
+                //this aliases a property of the contextual type of the binding element
                 return symbol!.flags & ts.SymbolFlags.Property ? AccessFlags.ReadReadonly : AccessFlags.CreateAlias;
 
             default:
-                throw new Error(`TODO: handle ${ts.SyntaxKind[parent.kind]}, ${parent.getText()}, node: ${ts.SyntaxKind[node.kind]} ${node.getText()}`)
+                //simplify
+                throw new Error(
+                    `TODO: handle ${ts.SyntaxKind[parent.kind]}, ${parent.getText()}, node: ${ts.SyntaxKind[node.kind]} ${node.getText()}`)
         }
     }
 
@@ -374,6 +380,10 @@ class AccessFlagsChecker {
             // If there's no contextual type, be pessimistic.
             //but for variable declaration be optimistic because we just added an alias (test)
             return addedAlias ? AccessFlags.ReadReadonly : AccessFlags.ReadWithMutableType;
+        }
+        if (contextualType.flags & ts.TypeFlags.Any) {
+            // Assume that it's OK to pass a readonly collection to 'any'
+            return AccessFlags.ReadReadonly;
         }
         this.addTypeAssignment(/*to*/ contextualType, /*from*/ this.checker.getTypeAtLocation(node));
         return !isReadonlyType(contextualType) ? AccessFlags.ReadWithMutableType : AccessFlags.ReadReadonly;

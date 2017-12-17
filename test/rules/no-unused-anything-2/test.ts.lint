@@ -1,0 +1,3 @@
+declare function use(x: any): void;
+const readonlyArray = [0];
+use(readonlyArray);

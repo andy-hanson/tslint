@@ -1,3 +1,3 @@
-import { f } from "a";
+import { f, T } from "a";
 declare function use(...args: any[]): void;
-use(f());
+use(f() as T);

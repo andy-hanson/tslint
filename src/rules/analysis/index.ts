@@ -16,7 +16,7 @@
  */
 
 import assert = require("assert");
-import { hasModifier, isSymbolFlagSet, isTypeFlagSet, isExpression } from "tsutils";
+import { hasModifier, isSymbolFlagSet, isTypeFlagSet, isExpression, isUnionType, isUnionOrIntersectionType } from "tsutils";
 import * as ts from "typescript";
 
 import { getEqualsKind } from "../..";
@@ -83,13 +83,16 @@ export class AnalysisResult {
         return targets !== undefined && targets.some(target => checker.getPropertyOfType(target, symbol.name) !== undefined);
     }
 
-    //method in AnalysisResult
     isPropertyAssignedToMutableCollection(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
         const targets = this.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
+        //TODO: use a set of target types, because there will be duplicates...
         return targets !== undefined && targets.some(target => {
             const targetProperty = checker.getPropertyOfType(target, symbol.name);
-            //test
-            return targetProperty !== undefined && !allowsReadonlyCollectionType(checker.getDeclaredTypeOfSymbol(targetProperty));
+            if (targetProperty === undefined) {
+                return false;
+            }
+            const t = getTypeOfProperty(targetProperty, checker); //name
+            return t !== undefined && !allowsReadonlyCollectionType(t);
         });
     }
 
@@ -131,11 +134,25 @@ export class AnalysisResult {
 
 }
 
-function allowsReadonlyCollectionType(type: ts.Type): boolean {
-    if (type.flags & ts.TypeFlags.Union) {//preferconditional
-        return (type as ts.UnionType).types.some(allowsReadonlyCollectionType);
+//why doesn't checker.getDeclaredTypeOfSymbol work?
+//this needs to work on methods too...
+function getTypeOfProperty(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Type | undefined {
+    if (symbol.declarations === undefined) {
+        return undefined; //neater
     }
-    return type.symbol !== undefined && type.symbol.name.startsWith("Readonly");
+    for (const d of symbol.declarations) { //name
+        if ((ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) && d.type !== undefined) {
+            return checker.getTypeFromTypeNode(d.type);
+        }
+    }
+    return undefined;
+}
+
+function allowsReadonlyCollectionType(type: ts.Type): boolean {
+    return isTypeFlagSet(type, ts.TypeFlags.Any)
+        || (isUnionType(type)
+            ? type.types.some(allowsReadonlyCollectionType)
+            : type.symbol !== undefined && type.symbol.name.startsWith("Readonly"));
 }
 
 //mv
@@ -262,9 +279,10 @@ class Analyzer {
         currentFile: ts.SourceFile,
         currentClass: ts.ClassLikeDeclaration | undefined,
     ) {
-        const bindingSymbol = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
-        if (bindingSymbol !== undefined) {
-            this.trackUseOfEachRootSymbol(node, bindingSymbol, currentFile, currentClass); //needs testing
+        const destructedPropertySymbol = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
+        if (destructedPropertySymbol !== undefined) {
+            this.trackUseOfEachRootSymbol(node, destructedPropertySymbol, currentFile, currentClass); //needs testing
+            //and also track the local variable below.
         }
         else {
             const objectLiteral = getContainingObjectLiteralElement(node); //needs testing
@@ -310,7 +328,9 @@ class Analyzer {
         const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
         const access = accessFlags(node, symbol, this.checker,
             aliasId => this.addAlias(aliasId, symbol),
-            (a, b) => this.addTypeAssignment(a, b)); //neater
+            (a, b) => {
+                this.addTypeAssignment(a, b)
+            }); //neater
         if (isPublicAccess(node, symbol, currentFile, currentClass)) {
             info.public |= access;
         } else {
@@ -330,8 +350,8 @@ class Analyzer {
         }
 
         //If 'to' is a union, we need to assign to parts.
-        if (to.flags & ts.TypeFlags.UnionOrIntersection) {
-            for (const t of (to as ts.UnionOrIntersectionType).types) {
+        if (isUnionOrIntersectionType(to)) {
+            for (const t of to.types) { //name
                 this.addTypeAssignment(t, from);
             }
             return;
@@ -366,9 +386,9 @@ class Analyzer {
     }
 
     private addCastToType(type: ts.Type): void {
-        if (type.flags & ts.TypeFlags.UnionOrIntersection) {
+        if (isUnionOrIntersectionType(type)) {
             //test -- for `type T = { a } & { b }` we treat both `a` and `b` as implicitly-created if there is a cast to `T`
-            for (const t of (type as ts.UnionOrIntersectionType).types) {
+            for (const t of type.types) {
                 this.addCastToType(t);
             }
             return;
@@ -629,8 +649,8 @@ function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, che
             result.push(symbol);
         }
 
-        if (isTypeFlagSet(contextualType, ts.TypeFlags.Union)) {
-            for (const t of (<ts.UnionType>contextualType).types) {
+        if (isUnionType(contextualType)) {
+            for (const t of contextualType.types) {
                 const symbol = t.getProperty(name);
                 if (symbol) {
                     result.push(symbol);

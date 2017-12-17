@@ -33,7 +33,7 @@ interface Options {
 }
 
 interface OptionsInput {
-    readonly name: string | string[];
+    readonly name: string | ReadonlyArray<string>;
     readonly message?: string;
 }
 

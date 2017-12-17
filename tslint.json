@@ -6,7 +6,7 @@
   "rules": {
     "no-unused-anything": [true, {
       "ignoreNames": ["metadata"]
-    }]/*,
+    }],
 
     // Don't want these
     "cyclomatic-complexity": false,
@@ -69,6 +69,6 @@
       "check-format",
       "allow-leading-underscore",
       "allow-pascal-case"
-    ]*/
+    ]
   }
 }

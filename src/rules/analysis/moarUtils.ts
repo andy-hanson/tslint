@@ -50,7 +50,8 @@ function getDeprecationFromDeclarations(declarations?: ReadonlyArray<ts.Declarat
     return undefined;
 }
 
-function getDeprecationFromDeclaration(declaration: ts.Node): string | undefined {
+//!
+export function getDeprecationFromDeclaration(declaration: ts.Node): string | undefined {
     for (const comment of getJsDoc(declaration)) {
         if (comment.tags === undefined) {
             continue;
