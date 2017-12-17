@@ -19,6 +19,7 @@
 import * as ts from "typescript";
 import { isSymbolFlagSet } from '../..';
 import { isAssignmentKind } from 'tsutils';
+import { isReadonlyType } from '../noUnusedAnythingRule';
 
 export class SymbolInfo {
     public private = AccessFlags.None;
@@ -110,7 +111,7 @@ export function accessFlags(
     symbol: ts.Symbol,
     checker: ts.TypeChecker,
     addAlias: (id: ts.Identifier) => void,
-    addTypeAssignment: (to: ts.Type, from: ts.Type) => void,
+    addTypeAssignment: (to: ts.Type, from: ts.Type) => void,//kill?
 ): AccessFlags {
     return new AccessFlagsChecker(checker, addAlias, addTypeAssignment).work(node, symbol, true);
 }
@@ -176,6 +177,10 @@ class AccessFlagsChecker {
                         ? this.work(parent as ts.CallExpression, symbol, shouldAddAlias)
                         : AccessFlags.ReadReadonly;
             }
+            case ts.SyntaxKind.NewExpression:
+                return node !== (parent as ts.NewExpression).expression
+                    ? this.fromContext(node)
+                    : AccessFlags.ReadReadonly;
 
             case ts.SyntaxKind.FunctionExpression:
                 assert(node === (parent as ts.FunctionExpression).name);
@@ -216,12 +221,13 @@ class AccessFlagsChecker {
                     return ts.isVariableStatement(gp!.parent!) ? createFlag(initializer) : AccessFlags.CreateAlias;
                 } else {
                     assert(node === initializer);
-                    if (ts.isIdentifier(name) && shouldAddAlias) {
-                        this.addAlias(name);
+                    const addedAlias = ts.isIdentifier(name) && shouldAddAlias;
+                    if (addedAlias) {
+                        this.addAlias(name as ts.Identifier);
                     }
                     // There may be no contextual type, in which case we consider this an immutable use for now.
                     // But we will track uses of the alias and handle that at the end.
-                    return this.fromContext(node);
+                    return this.fromContext(node, addedAlias);
                 }
             }
 
@@ -333,7 +339,6 @@ class AccessFlagsChecker {
                 //these expressions may expose it mutably depending on the contextual type
             case ts.SyntaxKind.ArrayLiteralExpression:
             case ts.SyntaxKind.ReturnStatement:
-            case ts.SyntaxKind.NewExpression:
             case ts.SyntaxKind.ArrowFunction: //return value
                 return this.fromContext(node);
 
@@ -361,20 +366,20 @@ class AccessFlagsChecker {
         }
     }
 
-    private fromContext(node: ts.Expression): AccessFlags {
+    private fromContext(node: ts.Expression, addedAlias = false): AccessFlags {
         // In all other locations: if provided to a context with a readonly type, not a mutable use.
         // `function f(): ReadonlyArray<number> { return x; }` uses `x` readonly, `funciton f(): number[]` does not.
         const contextualType = this.checker.getContextualType(node); //uncast
         if (!contextualType) {
             // If there's no contextual type, be pessimistic.
-            return AccessFlags.ReadWithMutableType;
+            //but for variable declaration be optimistic because we just added an alias (test)
+            return addedAlias ? AccessFlags.ReadReadonly : AccessFlags.ReadWithMutableType;
         }
         this.addTypeAssignment(/*to*/ contextualType, /*from*/ this.checker.getTypeAtLocation(node));
-        return !this.checker.typeToString(contextualType).startsWith("Readonly")
-            ? AccessFlags.ReadWithMutableType
-            : AccessFlags.ReadReadonly;
+        return !isReadonlyType(contextualType) ? AccessFlags.ReadWithMutableType : AccessFlags.ReadReadonly;
     }
 }
+
 
 function createFlag(initializer: ts.Expression | undefined): AccessFlags {
     return initializer === undefined
@@ -388,8 +393,12 @@ function isFreshCollection(initializer: ts.Expression): boolean {
         ts.isNewExpression(initializer) && isMutableCollectionTypeName(initializer.expression);
 }
 
+//kill
 export function isMutableCollectionTypeName(node: ts.Node): node is ts.Identifier {
-    return ts.isIdentifier(node) && mutableCollectionTypeNames.has(node.text);
+    return ts.isIdentifier(node) && isMutableCollectionTypeNameStr(node.text);
+}
+export function isMutableCollectionTypeNameStr(name: string): boolean {
+    return mutableCollectionTypeNames.has(name);
 }
 const mutableCollectionTypeNames: ReadonlySet<string> = new Set(["Array", "Set", "Map"]); //name better, reuse?
 

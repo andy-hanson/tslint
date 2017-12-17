@@ -66,18 +66,6 @@ export function isTested(node: ts.Node): node is Tested {
     }
 }
 
-
-/*export type Tested =
-    (ElementOfClassOrInterface | ts.VariableDeclaration | ts.ParameterDeclaration | ts.FunctionDeclaration)
-    & { readonly name: ts.Identifier }; // tslint:disable-line no-unused-anything (https://github.com/Microsoft/TypeScript/pull/20609)
-export function isTested(node: ts.Node): node is Tested { //what does this mean???
-    return (isElementOfClassOrInterface(node)
-        || ts.isVariableDeclaration(node)
-        || ts.isParameter(node)
-        || ts.isFunctionDeclaration(node))
-        && node.name !== undefined && ts.isIdentifier(node.name);
-}*/
-
 export class AnalysisResult {
     constructor(
         readonly symbolInfos: ReadonlyMap<ts.Symbol, SymbolInfo>,
@@ -432,7 +420,8 @@ function zip<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>, cb: (a: T, b: T) => vo
     }
 }
 
-function isTypeReference(type: ts.Type): type is ts.TypeReference {
+//already in tsutils?
+export function isTypeReference(type: ts.Type): type is ts.TypeReference {
     return !!(type.flags & ts.TypeFlags.Object) && !!((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Reference);
 }
 

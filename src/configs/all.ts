@@ -268,7 +268,7 @@ export const rules = {
     ],
 };
 
-export const RULES_EXCLUDED_FROM_ALL_CONFIG =
+export const RULES_EXCLUDED_FROM_ALL_CONFIG: ReadonlyArray<string> =
     ["ban", "fileHeader", "importBlacklist", "noInvalidThis", "noSwitchCaseFallThrough", "typeofCompare"];
 
 // Exclude typescript-only rules from jsRules, otherwise it's identical.

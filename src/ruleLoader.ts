@@ -28,7 +28,7 @@ const CORE_RULES_DIRECTORY = path.resolve(moduleDirectory, ".", "rules");
 const cachedRules = new Map<string, RuleConstructor | "not-found">();
 
 export function loadRules(ruleOptionsList: ReadonlyArray<IOptions>,
-                          rulesDirectories?: string | string[],
+                          rulesDirectories?: string | ReadonlyArray<string>,
                           isJs = false): ReadonlyArray<IRule> {
     const rules: IRule[] = [];
     const notFoundRules: string[] = [];

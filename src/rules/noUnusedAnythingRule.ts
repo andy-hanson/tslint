@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
+import assert = require("assert");
 import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind, isSignatureDeclaration } from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
 
-import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, canBePrivate } from './analysis';
+import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, canBePrivate, isTypeReference } from './analysis';
 import { isNodeFlagSet } from 'tsutils';
 import { getSymbolDeprecation } from './analysis/moarUtils';
-import { AccessFlags, SymbolInfo, isMutableCollectionTypeName } from './analysis/accessFlags';
+import { AccessFlags, SymbolInfo, isMutableCollectionTypeName, isMutableCollectionTypeNameStr } from './analysis/accessFlags';
 import { find } from '../utils';
 
 //todo: warn for unused `export const`
@@ -64,7 +65,7 @@ export class Rule extends Lint.Rules.TypedRule {
                 console.log("<no file>", text);
             }
         }
-        //assert(errs.length === 0); //kill
+        assert(errs.length === 0); //kill
 
         const info = getInfo(program);
         const checker = program.getTypeChecker();
@@ -235,8 +236,12 @@ class Walker extends Lint.AbstractWalker<Options> {
         }
 
         const typeNode = getTypeNode(node);
-        const mutableTypeInfo = typeNode === undefined ? undefined : getMutableCollectionType(typeNode);
-        if (mutableTypeInfo === undefined) {
+        let info = typeNode === undefined
+            ? shouldTypeReadonlyCollectionWithInferredType(node)
+                ? getMutableCollectionTypeFromType(this.checker.getTypeAtLocation(node.name))
+                : undefined
+            : getMutableCollectionTypeFromNode(typeNode);
+        if (info === undefined) {
             return;
         }
 
@@ -246,14 +251,67 @@ class Walker extends Lint.AbstractWalker<Options> {
             return;
         }
 
-        this.addFailureAtNode(mutableTypeInfo.typeNode, `Prefer Readonly${mutableTypeInfo.typeName}`);
+        this.addFailureAtNode(
+            typeof info === "string" ? node.name : info.typeNode,
+            preferReadonly(typeof info === "string" ? info : info.typeName));
     }
 }
 
-function getMutableCollectionType(typeNode: ts.TypeNode): { readonly typeNode: ts.TypeNode, readonly typeName: string } | undefined {
+//!
+function preferReadonly(typeName: string): string {
+    return `Analysis indicates this could be a Readonly${typeName}.`;
+}
+
+// For class property or export, warn if the implicit type is ReadonlyArray.
+// But for a local variable, don't demand a type annotation everywhere an array isn't mutated, because that's annoying.
+function shouldTypeReadonlyCollectionWithInferredType(node: Tested): boolean {//test
+    if (ts.isPropertyDeclaration(node)) {
+        return true;
+    }
+    if (ts.isVariableDeclaration(node)) {
+        //helper for this...
+        const p = node.parent!;
+        if (ts.isVariableDeclarationList(p)) {
+            const pp = p.parent!;
+            if (ts.isVariableStatement(pp)) {
+                return ts.isSourceFile(pp.parent!);
+            }
+        }
+    }
+    return false;
+}
+
+//returns the type name
+function getMutableCollectionTypeFromType(type: ts.Type): string | undefined {
+    if (type.flags & ts.TypeFlags.UnionOrIntersection) { //isUnionType helper
+        return find((type as ts.UnionOrIntersectionType).types, getMutableCollectionTypeFromType);
+    }
+    if (isTypeReference(type)) {
+        const { symbol } = type.target;
+        if (symbol !== undefined && isMutableCollectionTypeNameStr(symbol.name)) {
+            return symbol.name;
+        }
+    }
+    return undefined;
+}
+
+//mostly dup of above, break out a utility?
+export function isReadonlyType(type: ts.Type): boolean {
+    if (type.flags & ts.TypeFlags.UnionOrIntersection) { //isUnionType helper
+        return (type as ts.UnionOrIntersectionType).types.some(isReadonlyType);
+    }
+    if (isTypeReference(type)) {
+        const { symbol } = type.target;
+        return symbol !== undefined && symbol.name.startsWith("Readonly");
+    }
+    return false;
+}
+
+
+function getMutableCollectionTypeFromNode(typeNode: ts.TypeNode): { readonly typeNode: ts.TypeNode, readonly typeName: string } | undefined {
     return ts.isUnionTypeNode(typeNode)
         //Report errors if `string | string[]` is used immutably (should be `string | ReadonlyArray<string>`) (test)
-        ? find(typeNode.types, getMutableCollectionType)
+        ? find(typeNode.types, getMutableCollectionTypeFromNode)
         : ts.isArrayTypeNode(typeNode)
         ? { typeNode, typeName: "Array" }
         : ts.isTypeReferenceNode(typeNode) && isMutableCollectionTypeName(typeNode.typeName)

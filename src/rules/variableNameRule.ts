@@ -24,7 +24,7 @@ import * as Lint from "../index";
 import { isLowerCase, isUpperCase } from "../utils";
 
 const BANNED_KEYWORDS = ["any", "Number", "number", "String", "string", "Boolean", "boolean", "Undefined", "undefined"];
-const bannedKeywordsSet = new Set(BANNED_KEYWORDS);
+const bannedKeywordsSet: ReadonlySet<string> = new Set(BANNED_KEYWORDS);
 const bannedKeywordsStr = BANNED_KEYWORDS.map((kw) => `\`${kw}\``).join(", ");
 
 const OPTION_LEADING_UNDERSCORE = "allow-leading-underscore";

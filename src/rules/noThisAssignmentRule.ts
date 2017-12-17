@@ -101,7 +101,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 }
 
 class NoThisAssignmentWalker extends Lint.AbstractWalker<Options> {
-    private readonly allowedThisNameTesters = this.options.allowedNames.map(
+    private readonly allowedThisNameTesters: ReadonlyArray<RegExp> = this.options.allowedNames.map(
         (allowedThisName) => new RegExp(allowedThisName));
 
     public walk(sourceFile: ts.SourceFile): void {

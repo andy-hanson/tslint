@@ -125,7 +125,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 // Transformations to apply to produce the desired ordering of imports.
 // The imports must be lexicographically sorted after applying the transform.
 type Transform = (x: string) => string;
-const TRANSFORMS = new Map<string, Transform>([
+const TRANSFORMS: ReadonlyMap<string, Transform> = new Map<string, Transform>([
     ["any", () => ""],
     ["case-insensitive", (x) => x.toLowerCase()],
     ["lowercase-first", flipCase],

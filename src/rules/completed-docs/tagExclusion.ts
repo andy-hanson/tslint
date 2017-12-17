@@ -35,7 +35,7 @@ export class TagExclusion extends Exclusion<ITagExclusionDescriptor> {
         ? {}
         : this.descriptor.tags.content;
 
-    private readonly existenceTags = new Set(
+    private readonly existenceTags: ReadonlySet<string> = new Set(
         this.descriptor.tags !== undefined && this.descriptor.tags.existence !== undefined
             ? this.descriptor.tags.existence
             : undefined);

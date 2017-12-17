@@ -47,7 +47,7 @@ export class Rule extends Lint.Rules.AbstractRule {
 
     public static readonly FAILURE_STRING = "'magic numbers' are not allowed";
 
-    public static readonly ALLOWED_NODES = new Set<ts.SyntaxKind>([
+    public static readonly ALLOWED_NODES: ReadonlySet<ts.SyntaxKind> = new Set<ts.SyntaxKind>([
         ts.SyntaxKind.ExportAssignment,
         ts.SyntaxKind.FirstAssignment,
         ts.SyntaxKind.LastAssignment,

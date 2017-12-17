@@ -26,9 +26,10 @@ import * as ts from "typescript";
 import { Replacement } from "./language/rule/rule";
 import * as Linter from "./linter";
 import { Logger } from "./runner";
-import { denormalizeWinPath, mapDefined, readBufferWithDetectedEncoding } from "./utils";
+import { denormalizeWinPath, mapDefined, readBufferWithDetectedEncoding, flatMap } from "./utils";
 import { LintError } from "./verify/lintError";
 import * as parse from "./verify/parse";
+import { ILinterOptions } from '.';
 
 const MARKUP_FILE_EXTENSION = ".lint"; //d'oh, can't do imports any more!!!
 const FIXES_FILE_EXTENSION = ".fix";
@@ -59,14 +60,9 @@ export interface TestResult {
 }
 
 export function runTests(patterns: ReadonlyArray<string>, rulesDirectory?: string | string[]): ReadonlyArray<TestResult> {
-    const files: string[] = [];
-    for (let pattern of patterns) {
-        if (path.basename(pattern) !== "tslint.json") {
-            pattern = path.join(pattern, "tslint.json");
-        }
-        files.push(...glob.sync(pattern));
-    }
-    return files.map((directory: string): TestResult => runTest(path.dirname(directory), rulesDirectory));
+    const tslintFiles = flatMap(patterns, pattern =>
+        glob.sync(path.basename(pattern) !== "tslint.json" ? path.join(pattern, "tslint.json") : pattern));
+    return tslintFiles.map(file => runTest(path.dirname(file), rulesDirectory));
 }
 
 export function runTest(testDirectory: string, rulesDirectory?: string | string[]): TestResult {
@@ -107,7 +103,7 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
     });//name
 
     const program = hasConfig ? makeMeAProgram(compilerOptions, mungledFiles) : undefined;
-    const lintOptions = {
+    const lintOptions: ILinterOptions = {
         fix: false,
         formatter: "prose",
         formattersDirectory: "",
@@ -140,7 +136,7 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
         let fixedFileText = "";
         let newFileText = "";
         try {
-            const fixedFile = fileToLint.replace(/\.lint$/, FIXES_FILE_EXTENSION);
+            const fixedFile = fileToLint.replace(/\.lint$/, "") + FIXES_FILE_EXTENSION;
             const stat = fs.statSync(fixedFile);
             if (stat.isFile()) {
                 fixedFileText = fs.readFileSync(fixedFile, "utf8");

@@ -11,7 +11,6 @@ declare function use(...args: any[]): void;
     f();
 }
 
-declare function use(...args: any[]): void;
 {
     class C {
         readonly p!: number;
@@ -29,6 +28,22 @@ declare function use(...args: any[]): void;
               ~ [pushonly]
         use(x.push(0));
         use(x.unshift());
+    }
+
+    // Works on properties too.
+    {
+        class C {
+            m = new Map<number, number>();
+            ~ [pushonly]
+        }
+        const c = new C();
+        c.m.set(0, 0);
+    }
+
+    // If we the collection is initialized to an alias, it's *not* unused.
+    {
+        const x: number[] = any;
+        x.push(0);
     }
 
     // Counterexamples: "pop" and "shift" and "splice" return useful data.
@@ -94,6 +109,13 @@ declare function use(...args: any[]): void;
 
 //// Tests for indirect assignment of properties
 {
+    // Assigning a type to itself doesn't count.
+    {
+        interface I { x: number; }
+                      ~ [unused]
+        function _(i: I) { return i; }
+    }
+
     // 'any' indirectly assigns to all properties
     {
         function f(p: { readonly x: number }) {
@@ -164,9 +186,35 @@ declare function use(...args: any[]): void;
 	new C(0).m();
 }
 
+// Prefer readonly collection types
+{
+    // Uses inferred type if no type annotation -- handles unions too.
+    {
+        class C {
+            readonly x = any ? [] : 2;
+                     ~ [readonlyarray]
+        }
+        const x = new C().x;
+        if (typeof x !== "number") {
+            use(x.length);
+        }
+    }
+
+    {
+        // Does not complain on local variables
+        const x = [0];
+        use(x);
+    }
+}
+// Does complain at top-level
+const readonlyArray = [0];
+use(readonlyArray);
+
+[unused]: Analysis found no uses of this symbol.
 [private]: Analysis found no public uses; this should be private.
 [pushonly]: This collection is created and filled with values, but never read from.
 [sideeffectonly]: This function is used for its side effect, but the return value is never used.
 [nocreate]: Analysis found places where this is read, but found no places where it is given a value.
 [noread]: This symbol is given a value, but analysis found no reads. This is likely dead code.
 [readonly]: Analysis found no writes to this property; mark it as `readonly`.
+[readonlyarray]: Analysis indicates this could be a ReadonlyArray.

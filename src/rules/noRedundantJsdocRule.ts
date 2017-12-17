@@ -108,7 +108,7 @@ function walk(ctx: Lint.WalkContext<void>): void {
     }
 }
 
-const redundantTags = new Set([
+const redundantTags: ReadonlySet<string> = new Set([
     "abstract",
     "access",
     "class",

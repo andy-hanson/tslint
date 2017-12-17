@@ -45,7 +45,7 @@ enum MemberKind {
 }
 // tslint:enable no-unused-anything
 
-const PRESETS = new Map<string, MemberCategoryJson[]>([
+const PRESETS: ReadonlyMap<string, ReadonlyArray<MemberCategoryJson>> = new Map<string, MemberCategoryJson[]>([
     ["fields-first", [
         "public-static-field",
         "protected-static-field",
@@ -92,9 +92,9 @@ const PRESETS = new Map<string, MemberCategoryJson[]>([
         "private-instance-method",
     ]],
 ]);
-const PRESET_NAMES = Array.from(PRESETS.keys());
+const PRESET_NAMES: ReadonlyArray<string> = Array.from(PRESETS.keys());
 
-const allMemberKindNames = mapDefined(Object.keys(MemberKind), (key) => {
+const allMemberKindNames: ReadonlyArray<string> = mapDefined(Object.keys(MemberKind), (key) => {
     const mk = (MemberKind as any)[key];
     return typeof mk === "number" ? MemberKind[mk].replace(/[A-Z]/g, (cap) => `-${cap.toLowerCase()}`) : undefined;
 });
