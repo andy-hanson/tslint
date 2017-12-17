@@ -163,19 +163,7 @@ class Analyzer {
     constructor(private readonly checker: ts.TypeChecker) {}
 
     public finish(): AnalysisResult {
-        //todo: repeat until no changes (test)
-        this.localVariableAliases.forEach((aliases, sym) => {
-            const originalInfo = this.symbolInfos.get(sym)!;
-            for (const alias of aliases) {
-                //todo: might be a private alias...
-                const aliasInfo = this.symbolInfos.get(alias)!;
-                if (aliasInfo.everUsedAsMutableCollection) {//todo: public/private difference
-                    originalInfo.private |= AccessFlags.ReadWithMutableType;
-                    originalInfo.public |= AccessFlags.ReadWithMutableType;
-                }
-            }
-        });
-
+        this.propagateAliases();
         return new AnalysisResult(
             this.symbolInfos,
             this.enumMembers,
@@ -187,7 +175,7 @@ class Analyzer {
     public analyze(node: ts.Node, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
         switch (node.kind) {
             case ts.SyntaxKind.Identifier:
-                this.fooId(node as ts.Identifier, currentFile, currentClass);
+                this.trackUse(node as ts.Identifier, currentFile, currentClass);
                 break;
             case ts.SyntaxKind.VariableDeclaration: {
                 const { initializer, type } = node as ts.VariableDeclaration;
@@ -228,7 +216,29 @@ class Analyzer {
         node.forEachChild(child => this.analyze(child, currentFile, currentClass));
     }
 
-    private fooId(node: ts.Identifier, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) { //name
+    private propagateAliases(): void {
+        let hadChanges = true;
+        while (hadChanges) {
+            hadChanges = false;
+            this.localVariableAliases.forEach((aliases, sym) => {
+                const originalInfo = this.symbolInfos.get(sym)!;
+                if (originalInfo.everUsedAsMutableCollection) {
+                    return; // Nothing to propagate
+                }
+                for (const alias of aliases) {
+                    //todo: might be a private alias...
+                    const aliasInfo = this.symbolInfos.get(alias)!;
+                    if (aliasInfo.everUsedAsMutableCollection) {//todo: public/private difference
+                        originalInfo.private |= AccessFlags.ReadWithMutableType;
+                        originalInfo.public |= AccessFlags.ReadWithMutableType;
+                        hadChanges = true;
+                    }
+                }
+            });
+        }
+    }
+
+    private trackUse(node: ts.Identifier, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined): void {
         const sym = this.checker.getSymbolAtLocation(node);
         if (sym === undefined) {
             return;
@@ -236,76 +246,53 @@ class Analyzer {
 
         const symbol = skipTransient(skipAlias(sym, this.checker));
         if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
-            this.trackEnumMemberUse(node, symbol);
-        } else {
-            this.trackSymbolUse(node, symbol, currentFile, currentClass);
+            this.enumMembers.set(symbol, accessFlagsForEnumAccess(node) | this.enumMembers.get(symbol)!);
+            return;
         }
-    }
 
-    private trackEnumMemberUse(node: ts.Identifier, symbol: ts.Symbol) {//needs much testing...
-        const prevFlags = this.enumMembers.get(symbol);
-        const flags = accessFlagsForEnumAccess(node);
-        this.enumMembers.set(symbol, flags | (prevFlags === undefined ? EnumAccessFlags.None : prevFlags));
-    }
-
-    private trackSymbolUse(
-        node: ts.Identifier,
-        symbol: ts.Symbol,
-        currentFile: ts.SourceFile,
-        currentClass: ts.ClassLikeDeclaration | undefined,
-    ) {
         const destructedPropertySymbol = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
         if (destructedPropertySymbol !== undefined) {
-            this.trackUseOfEachRootSymbol(node, destructedPropertySymbol, currentFile, currentClass); //needs testing
+            this.trackUseOfSymbol(node, destructedPropertySymbol, currentFile, currentClass); //needs testing
             //and also track the local variable below.
         }
         else {
             const objectLiteral = getContainingObjectLiteralElement(node); //needs testing
             if (objectLiteral !== undefined) {
                 for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(objectLiteral, this.checker)) {
-                    this.trackUseOfEachRootSymbol(node, assignedPropertySymbol, currentFile, currentClass);
+                    this.trackUseOfSymbol(node, assignedPropertySymbol, currentFile, currentClass);
                 }
                 //we're doing this both for the property and for the value referenced by shorthand
                 //test: function f(x) { return { x }; }
                 const parent = node.parent!;
                 if (ts.isShorthandPropertyAssignment(parent)) {
                     const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
-                    this.trackUseOfEachRootSymbol(node, v, currentFile, currentClass);
+                    this.trackUseOfSymbol(node, v, currentFile, currentClass);
                 }
                 return;
             }
         }
 
-        this.trackUseOfEachRootSymbol(node, symbol, currentFile, currentClass);
+        this.trackUseOfSymbol(node, symbol, currentFile, currentClass);
     }
 
-    private trackUseOfEachRootSymbol(
+    private trackUseOfSymbol(
         node: ts.Identifier,
-        symbol: ts.Symbol,
+        sym: ts.Symbol,
         currentFile: ts.SourceFile,
         currentClass: ts.ClassLikeDeclaration | undefined,
     ) {
-        for (const root of this.checker.getRootSymbols(symbol)) { //needs testing
-            this.trackUse(node, root, currentFile, currentClass);
-        }
-    }
+        for (const symbol of this.checker.getRootSymbols(sym)) { //needs testing
+            if (symbol.declarations === undefined) {
+                return;
+            }
 
-    private trackUse(
-        node: ts.Identifier,
-        symbol: ts.Symbol,
-        currentFile: ts.SourceFile,
-        currentClass: ts.ClassLikeDeclaration | undefined,
-    ): void {
-        if (symbol.declarations === undefined) {
-            return;
-        }
-
-        const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
-        const access = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
-        if (isPublicAccess(node, symbol, currentFile, currentClass)) {
-            info.public |= access;
-        } else {
-            info.private |= access;
+            const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
+            const access = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
+            if (isPublicAccess(node, symbol, currentFile, currentClass)) {
+                info.public |= access;
+            } else {
+                info.private |= access;
+            }
         }
     }
 

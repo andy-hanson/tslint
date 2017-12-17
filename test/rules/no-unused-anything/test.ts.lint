@@ -207,6 +207,24 @@ declare function use(...args: any[]): void;
                  ~~~~~~~~~~~~~~~~~~~ [readonlymap]
         m.get(0);
     }
+
+    // If collection is aliased, looks for mutable uses in those aliases.
+    {
+        // Testing that we propagate across multpile aliases.
+        const x: number[] = [0];
+        const y = x;
+        const z = y;
+        z.push(0);
+        use(x[0]);
+    }
+
+    {
+        const x: number[] = [0];
+                 ~~~~~~~~ [readonlyarray]
+        const y = x;
+        const z = y;
+        use(z[0]);
+    }
 }
 // Does complain at top-level
 const readonlyArray = [0];
