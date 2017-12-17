@@ -15,35 +15,53 @@
  * limitations under the License.
  */
 
-import assert = require("assert");
-import { hasModifier, isSymbolFlagSet, getVariableDeclarationKind, VariableDeclarationKind, isSignatureDeclaration, isUnionOrIntersectionType } from "tsutils";
+import {
+    getVariableDeclarationKind,
+    hasModifier,
+    isSignatureDeclaration,
+    isSymbolFlagSet,
+    isTypeFlagSet,
+    isTypeReference,
+    isUnionOrIntersectionType,
+    VariableDeclarationKind
+} from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "..";
 
-import { isTested, Tested, AnalysisResult, getInfo, hasEnumAccessFlag, EnumAccessFlags, canBePrivate, isTypeReference } from './analysis';
+import { AnalysisResult, getInfo, canBePrivate } from "./analysis";
+import { SymbolInfo, isNameOfMutableCollectionType } from "./analysis/accessFlags";
+import { hasEnumAccessFlag, EnumAccessFlags } from "./analysis/enumAccessFlags";
+import { getDeprecationFromDeclaration } from "./analysis/deprecationUtils";
+import { isUsageTrackedDeclaration, UsageTrackedDeclaration } from "./analysis/utils";
 import { isNodeFlagSet } from 'tsutils';
-import { getDeprecationFromDeclaration } from './analysis/moarUtils';
-import { AccessFlags, SymbolInfo, isMutableCollectionTypeName, isMutableCollectionTypeNameStr } from './analysis/accessFlags';
 import { find } from '../utils';
-
-//todo: warn for unused `export const`
-//todo: check type declarations -- e.g. if an array is never pushed to, use a ReadonlyArray
-//todo: detect parameter of recursive fn only passed to another instance of the same fn
-//todo: detect recursive unused functions (maybe a different rule for that)
-//todo: document that `@deprecated` comments disable this rule
-//todo: recommend const enum if enum is never indexed
-
-//todo: warn on optional parameters never passed
-
-//todo: separate rule: no-mutate-method
 
 export class Rule extends Lint.Rules.TypedRule {
     /* tslint:disable:object-literal-sort-keys */
     public static metadata: Lint.IRuleMetadata = {
         ruleName: "no-unused-anything",
         description: Lint.Utils.dedent`
-            AAAA.`,
+            For every symbol, looks for all uses of that symbol to determine whether it has more capabilities than necessary.
+
+            * Public class members which could be private.
+            * Exported symbols that don't need to be exported.
+            * Mutable properties that could be \`readonly\`.
+            * Mutable variables that could be \`const\`.
+            * Collections that are only read from, but are not typed as a \`ReadonlyArray\`, \`ReadonlySet\`, or \`ReadonlyMap\`.
+            * Collections that are initialized to a fresh collection (\`[]\`, \`new Set(...)\`, \`new Map(...)\`)
+              and have elements inserted, but never read from.
+            * Functions that return a value but are only used for a side effect.
+            * Optional properties that are read from, but are never assigned to.
+            * Enum members that are tested for, but never used as a value.
+
+            Note that looking for all uses of a symbol works best when as many files as possible are included in the tsconfig.
+            When linting a library, it is recommended to lint with a \`tsconfig.json\` that includes tests,
+            which should use of public exports of the library that are not used internally.
+
+            This rule will be disabled on anything inside a node marked with a \`@deprecated\` jsdoc comment,
+            since it is assumed that those will naturally have no uses.
+            `,
         optionsDescription: "Not configurable.",
         options: null,
         optionExamples: [true],
@@ -53,20 +71,6 @@ export class Rule extends Lint.Rules.TypedRule {
     /* tslint:enable:object-literal-sort-keys */
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
-        const errs = ts.getPreEmitDiagnostics(program, sourceFile);
-        for (const err of errs) {
-            const text = ts.flattenDiagnosticMessageText(err.messageText, "\n");
-            const { file, start } = err;
-            if (file) {
-                const file = err.file!;
-                const pos = file.getLineAndCharacterOfPosition(start!);
-                console.log(file.fileName, pos, text);
-            } else {
-                console.log("<no file>", text);
-            }
-        }
-        assert(errs.length === 0); //kill
-
         const info = getInfo(program);
         const checker = program.getTypeChecker();
         return this.applyWithWalker(new Walker(sourceFile, this.ruleName, parseOptions(this.getOptions()), info, checker));
@@ -94,66 +98,66 @@ class Walker extends Lint.AbstractWalker<Options> {
         sourceFile: ts.SourceFile,
         ruleName: string,
         options: Options,
-        private readonly info: AnalysisResult,//name
+        private readonly analysis: AnalysisResult,
         private readonly checker: ts.TypeChecker,
     ) {
         super(sourceFile, ruleName, options);
     }
 
-    public walk(sourceFile: ts.SourceFile): void {
-        const cb = (node: ts.Node) => {
-            switch (node.kind) {
-                //case ts.SyntaxKind.PropertySignature:
-                //case ts.SyntaxKind.PropertyDeclaration:
-                //    this.handleProperty(node as ts.PropertyDeclaration | ts.PropertySignature);
-                //    break;
-                case ts.SyntaxKind.Parameter: {
-                    const p = node as ts.ParameterDeclaration & { readonly name: ts.Identifier };
-                    if (ts.isParameterPropertyDeclaration(node)) {
-                        //Don't care if the parameter-side is unused, since it's used to create the property.
-                        this.handleSymbol(p, getThePropertySymbol(p, this.checker));
-                    }
-                    //TODO: for a signature, look into its implementers for uses
-                    else if (!!(p.parent! as any).body //obs a parameter in a signature isn't "used"
-                        && ts.isIdentifier(p.name)
-                        && p.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { //todo: handle 'this'
-                        //tslint:disable-next-line no-unused-anything
-                        this.handleSymbol(p, this.checker.getSymbolAtLocation(p.name)!);
-                    }
-                    break;
+    public walk(node: ts.Node): void {
+        switch (node.kind) {
+            case ts.SyntaxKind.Parameter:
+                if (ts.isIdentifier((node as ts.ParameterDeclaration).name)) {
+                    this.handleParameter(node as NamedParameter);
                 }
-                case ts.SyntaxKind.EnumMember: {
-                    const sym = this.checker.getSymbolAtLocation((node as ts.EnumMember).name)!;
-                    const flags = this.info.enumMembers.get(sym);
-                    if (flags === undefined) {
-                        this.addFailureAtNode(node, "UNUSED");
-                    }
-                    else {
-                        if (!hasEnumAccessFlag(flags, EnumAccessFlags.UsedInExpression)) {
-                            this.addFailureAtNode(node,
-                                hasEnumAccessFlag(flags, EnumAccessFlags.Tested)
-                                ? "Enum flag is compared against, but never actually used."
-                                : "Enum flag is never used"); //test
-                        }
-                    }
-                    break;
+                break;
+            case ts.SyntaxKind.EnumMember:
+                this.handleEnumMember(node as ts.EnumMember);
+                break;
+            default:
+                if (isUsageTrackedDeclaration(node)) {
+                    this.handleSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
                 }
-                default:
-                    if (isTested(node)) {
-                        this.handleSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
-                    }
-            }
-            node.forEachChild(cb);
         }
-        sourceFile.forEachChild(cb);
+        node.forEachChild(child => this.walk(child));
     }
 
-    private handleSymbol(node: Tested, symbol: ts.Symbol): void {
+    private handleParameter(node: NamedParameter): void { //name
+        if (ts.isParameterPropertyDeclaration(node)) {
+            // Don't care if the parameter side is unused, since it's used to create the property.
+            // So, only check the property side.
+            const prop = getPropertyOfParameterProperty(node, this.checker);
+            if (prop !== undefined) {
+                this.handleSymbol(node as ts.ParameterDeclaration & { readonly name: ts.Identifier }, prop);
+            }
+        }
+        //TODO: for a signature, look into its implementers for uses
+        else if (!!(node.parent! as any).body //obs a parameter in a signature isn't "used"
+            && ts.isIdentifier(node.name)
+            && node.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { //todo: handle 'this'
+            //tslint:disable-next-line no-unused-anything
+            this.handleSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
+        }
+    }
+
+    private handleEnumMember(node: ts.EnumMember): void {
+        const sym = this.checker.getSymbolAtLocation(node.name)!;
+        const flag = this.analysis.enumMembers.get(sym); //name
+        const flags = flag === undefined ? EnumAccessFlags.None : flag;
+        if (!hasEnumAccessFlag(flags, EnumAccessFlags.UsedInExpression)) {
+            this.addFailureAtNode(node.name,
+                hasEnumAccessFlag(flags, EnumAccessFlags.Tested)
+                ? "Enum member is compared against, but analysis found no cases of something being given this value."
+                : "Analysis found no uses of this symbol.");
+        }
+    }
+
+    private handleSymbol(node: UsageTrackedDeclaration, symbol: ts.Symbol): void {
         if (isOkToNotUse(node, symbol, this.checker, this.options.ignoreNames)) {
             return;
         }
 
-        const info = this.info.symbolInfos.get(symbol);
+        const info = this.analysis.symbolInfos.get(symbol);
         if (info === undefined) {
             this.addFailureAtNode(node, "Symbol is completely unused.");
             //test -- don't we at least create the symbol??? So this should never happen?
@@ -164,62 +168,68 @@ class Walker extends Lint.AbstractWalker<Options> {
         this.checkCollectionUses(node, symbol, info);
     }
 
-    private checkSymbolUses(node: Tested, symbol: ts.Symbol, info: SymbolInfo): void {
+    private checkSymbolUses(node: UsageTrackedDeclaration, symbol: ts.Symbol, info: SymbolInfo): void {
         const fail = (f: string): void => { this.addFailureAtNode(node.name, f); };
 
-        if (!info.everUsedPublicly()) {
+        if (!info.everUsedPublicly) {
             const x = canBePrivate(node);
             if (x === undefined) {
-                fail("Analysis found no uses of this symbol.");
+                fail("Analysis found no uses of this symbol."); //test
             } else if (ts.isSourceFile(x)) {
-                if (!isIsImplicitlyExported(node, this.sourceFile, this.checker)) { //test implicit exports
+                if (!isIsImplicitlyExported(node, this.sourceFile, this.checker)) {
                     fail("Analysis found no uses in other modules; this should not be exported.");
                 }
             } else {
                 //todo: test that we handle completely unused abstract method
                 if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)
                     //may need to be public due to assigning this to an interface
-                    && !this.info.isPropertyUsedForAssignment(symbol, this.checker)) {
+                    && !this.analysis.isPropertyUsedForAssignment(symbol, this.checker)) {
                     fail("Analysis found no public uses; this should be private.");
                 }
             }
             return;
-        } else if (!info.everRead()) {
+        } else if (!info.everRead) {
             //might be a fn used for a side effect.
-            if (info.everUsedForSideEffect() && isFunctionLike(symbol)) {
+            if (info.everUsedForSideEffect && isFunctionLike(symbol)) {
                 const sig = this.checker.getSignatureFromDeclaration(symbol.valueDeclaration as ts.SignatureDeclaration)!;
-                if (!(this.checker.getReturnTypeOfSignature(sig).flags & ts.TypeFlags.Void)) {
+                if (!isTypeFlagSet(this.checker.getReturnTypeOfSignature(sig), ts.TypeFlags.Void)) {
                     fail("This function is used for its side effect, but the return value is never used.");
                 }
             } else {
-                if (info.mutatesCollection()) {
-                    if (!info.has(AccessFlags.CreateAlias)) {
+                if (info.mutatesCollection) {
+                    if (!info.everAssignedANonFreshValue) {
                         fail("This collection is created and filled with values, but never read from.");
                     }
                 }
                 else {
-                    if (!this.info.isPropertyUsedForAssignment(symbol, this.checker)) {
+                    if (!this.analysis.isPropertyUsedForAssignment(symbol, this.checker)) {
                         fail("This symbol is given a value, but analysis found no reads. This is likely dead code.");
                     }
                 }
             }
-        } else if (!info.everWritten() && isMutable(node)) {
+        } else if (!info.everWritten && isMutable(node)) {
             fail(ts.isVariableDeclaration(node)
                 ? "Analysis found no mutable uses of this variable; use `const`." //tests
                 : "Analysis found no writes to this property; mark it as `readonly`.");
         } else if (
-            !info.everCreatedOrWritten()
-            && !this.info.symbolIsPropertyOfTypeAssignedToSomehow(symbol, this.checker)) {
+            !info.everCreatedOrWritten
+            && !this.analysis.symbolIsIndirectlyAssignedProperty(symbol, this.checker)) {
             fail("Analysis found places where this is read, but found no places where it is given a value.");
         }
     }
 
-    private checkCollectionUses(node: Tested, symbol: ts.Symbol, symbolInfo: SymbolInfo): void {
-        if (symbolInfo.everUsedAsMutableCollection()) {
+    private checkCollectionUses(node: UsageTrackedDeclaration, symbol: ts.Symbol, symbolInfo: SymbolInfo): void {
+        if (symbolInfo.everUsedAsMutableCollection) {
             return;
         }
 
-        const typeNode = getTypeNode(node);
+        if (ts.isParameter(node) && node.dotDotDotToken !== undefined) {
+            // Can't recommend to use `...args: ReadonlyArray<number>`.
+            // See https://github.com/Microsoft/TypeScript/issues/15972
+            return;
+        }
+
+        const typeNode = getTypeAnnotationNode(node);
         const info = typeNode === undefined
             ? shouldTypeReadonlyCollectionWithInferredType(node)
                 ? getMutableCollectionTypeFromType(this.checker.getTypeAtLocation(node.name))
@@ -231,7 +241,7 @@ class Walker extends Lint.AbstractWalker<Options> {
 
         //For a property: but this type might be assigned to another type, and that other type might have this property mutable (test)
         //todo: also for method (test)
-        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property) && this.info.isPropertyAssignedToMutableCollection(symbol, this.checker)) {
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property) && this.analysis.isPropertyAssignedToMutableCollection(symbol, this.checker)) {
             return;
         }
 
@@ -248,7 +258,7 @@ function preferReadonly(typeName: string): string {
 
 // For class property or export, warn if the implicit type is ReadonlyArray.
 // But for a local variable, don't demand a type annotation everywhere an array isn't mutated, because that's annoying.
-function shouldTypeReadonlyCollectionWithInferredType(node: Tested): boolean {//test
+function shouldTypeReadonlyCollectionWithInferredType(node: UsageTrackedDeclaration): boolean {//test
     if (ts.isPropertyDeclaration(node)) {
         return true;
     }
@@ -272,7 +282,7 @@ function getMutableCollectionTypeFromType(type: ts.Type): string | undefined {
     }
     if (isTypeReference(type)) {
         const { symbol } = type.target;
-        if (symbol !== undefined && isMutableCollectionTypeNameStr(symbol.name)) {
+        if (symbol !== undefined && isNameOfMutableCollectionType(symbol.name)) {
             return symbol.name;
         }
     }
@@ -291,23 +301,26 @@ export function isReadonlyType(type: ts.Type): boolean {
 }
 
 
-function getMutableCollectionTypeFromNode(typeNode: ts.TypeNode): { readonly typeNode: ts.TypeNode, readonly typeName: string } | undefined {
+function getMutableCollectionTypeFromNode(
+    typeNode: ts.TypeNode,
+): { readonly typeNode: ts.TypeNode, readonly typeName: string } | undefined {
     return ts.isUnionTypeNode(typeNode)
         //Report errors if `string | string[]` is used immutably (should be `string | ReadonlyArray<string>`) (test)
         ? find(typeNode.types, getMutableCollectionTypeFromNode)
         : ts.isArrayTypeNode(typeNode)
         ? { typeNode, typeName: "Array" }
-        : ts.isTypeReferenceNode(typeNode) && isMutableCollectionTypeName(typeNode.typeName)
+        : ts.isTypeReferenceNode(typeNode)
+            && ts.isIdentifier(typeNode.typeName)
+            && isNameOfMutableCollectionType(typeNode.typeName.text)
         ? { typeNode, typeName: typeNode.typeName.text }
         : undefined;
 }
 
-//test: that we handle unions
-function getTypeNode(node: Tested): ts.TypeNode | undefined {
+function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | undefined {
     switch (node.kind) {
         case ts.SyntaxKind.Parameter:
         //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
-            return (node as ts.ParameterDeclaration).dotDotDotToken === undefined ? (node as ts.ParameterDeclaration).type : undefined;
+            //return (node as ts.ParameterDeclaration).dotDotDotToken === undefined ? (node as ts.ParameterDeclaration).type : undefined;
         case ts.SyntaxKind.VariableDeclaration:
         case ts.SyntaxKind.PropertyDeclaration:
         case ts.SyntaxKind.MethodDeclaration:
@@ -317,14 +330,18 @@ function getTypeNode(node: Tested): ts.TypeNode | undefined {
         case ts.SyntaxKind.PropertySignature:
         case ts.SyntaxKind.GetAccessor:
         case ts.SyntaxKind.SetAccessor:
-            return (node as ts.VariableDeclaration | ts.PropertyDeclaration | ts.MethodDeclaration | ts.MethodSignature | ts.FunctionDeclaration | ts.PropertyDeclaration | ts.PropertySignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration).type;
+            type T =
+                | ts.ParameterDeclaration | ts.VariableDeclaration | ts.PropertyDeclaration
+                | ts.MethodDeclaration | ts.MethodSignature | ts.FunctionDeclaration
+                | ts.PropertyDeclaration | ts.PropertySignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration;
+            return (node as T).type;
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.EnumDeclaration:
         case ts.SyntaxKind.InterfaceDeclaration:
         case ts.SyntaxKind.ModuleDeclaration:
             return undefined;
         default:
-            throw new Error(`TODO: handle ${ts.SyntaxKind[node.kind]}`)
+            throw new Error(`TODO: Handle ${ts.SyntaxKind[node.kind]}`);
     }
 }
 
@@ -335,7 +352,7 @@ function isFunctionLike(symbol: ts.Symbol): boolean {
 }
 
 //note: returns false for things that can't be made immutable (parameters, catch clause variables, methods)
-function isMutable(node: Tested): boolean {
+function isMutable(node: UsageTrackedDeclaration): boolean {
     if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node) || ts.isParameterPropertyDeclaration(node)) {
         return !hasModifier(node.modifiers, ts.SyntaxKind.ReadonlyKeyword);
     } else if (ts.isVariableDeclaration(node)) {
@@ -346,7 +363,7 @@ function isMutable(node: Tested): boolean {
     }
 }
 
-function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
+function isOkToNotUse(node: UsageTrackedDeclaration, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
     return isAmbient(node)
         || isIgnored(node)
         || isDeprecated(node)
@@ -355,15 +372,19 @@ function isOkToNotUse(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker, 
         || ignoreNames.has(node.name.text);
 }
 
-function isAmbient(node: Tested): boolean { //test
+function isAmbient(node: UsageTrackedDeclaration): boolean { //test
     return isNodeFlagSet(node, (ts.NodeFlags as any).Ambient) //todo: make that flag public
 }
 
-function isIgnored(node: Tested): boolean {
+function isIgnored(node: UsageTrackedDeclaration): boolean {
     return node.name.text.startsWith("_");
 }
 
-function isOverload(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+function isDeprecated(node: ts.Node): boolean {
+    return !ts.isSourceFile(node) && (getDeprecationFromDeclaration(node) !== undefined || isDeprecated(node.parent!));
+}
+
+function isOverload(node: UsageTrackedDeclaration, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
     if (!ts.isParameter(node)) {
         return false;
     }
@@ -376,27 +397,8 @@ function isOverload(node: Tested, symbol: ts.Symbol, checker: ts.TypeChecker): b
     return signatureSymbol !== undefined && signatureSymbol.declarations!.length !== 1;
 }
 
-//test: for parameter property in deprecated class
-//really, all we care is that some parent node has an `@deprecated` commment, why bother w/ symbols here...
-function isDeprecated(node: ts.Node): boolean {
-    return !ts.isSourceFile(node) && (getDeprecationFromDeclaration(node) !== undefined || isDeprecated(node.parent!));
 
-    /*if (isItDeprecated(symbol)) {
-        return true;
-    }
-    // If the class is deprecated, all of its methods are too.
-    const parent = node.parent!;
-    return (ts.isClassLike(parent) || ts.isInterfaceDeclaration(parent))
-        && parent.name !== undefined
-        && isItDeprecated(checker.getSymbolAtLocation(parent.name)!);
-}
-function isItDeprecated(symbol: ts.Symbol): boolean { //name
-    return getSymbolDeprecation(symbol) !== undefined;
-}
-*/
-}
-
-function isOverride(node: Tested, checker: ts.TypeChecker): boolean { //test
+function isOverride(node: UsageTrackedDeclaration, checker: ts.TypeChecker): boolean { //test
     const name = node.name.text;
     const parent = node.parent!;
     if (!ts.isClassLike(parent)) {
@@ -407,13 +409,15 @@ function isOverride(node: Tested, checker: ts.TypeChecker): boolean { //test
             checker.getPropertyOfType(checker.getTypeFromTypeNode(typeNode), name) !== undefined));
 }
 
-function getThePropertySymbol(p: ts.ParameterDeclaration, checker: ts.TypeChecker) { //name
-    return checker.getSymbolsOfParameterPropertyDeclaration(p, (p.name as ts.Identifier).text)
-        .find(s => isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
+type NamedParameter =  ts.ParameterDeclaration & { readonly name: ts.Identifier };
+
+function getPropertyOfParameterProperty(p: NamedParameter, checker: ts.TypeChecker): ts.Symbol {
+    return checker.getSymbolsOfParameterPropertyDeclaration(p, p.name.text).find(s =>
+            isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
 }
 
 
-function isIsImplicitlyExported(node: Tested, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
+function isIsImplicitlyExported(node: UsageTrackedDeclaration, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
     switch (node.kind) {
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.InterfaceDeclaration:

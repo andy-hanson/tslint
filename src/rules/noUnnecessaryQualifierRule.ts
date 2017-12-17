@@ -19,7 +19,7 @@ import * as utils from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "../index";
-import { tryGetAliasedSymbol } from './analysis/moarUtils';
+import { tryGetAliasedSymbol } from "./analysis/utils";
 
 export class Rule extends Lint.Rules.TypedRule {
     /* tslint:disable:object-literal-sort-keys */

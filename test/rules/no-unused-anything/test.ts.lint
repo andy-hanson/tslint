@@ -1,6 +1,47 @@
 declare const any: any;
 declare function use(...args: any[]): void;
 
+// Special handling of enum members
+{
+    {
+        enum E {
+            A,
+            B,
+            ~ [enummembernevercreated]
+            C,
+            ~ [unused]
+        }
+
+        function f(e: E) {
+            switch (e) { //TODO: similar test with 'if' and '==='
+                case E.A:
+                case E.B:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+        use(f(E.A));
+    }
+
+    {
+        // Internal uses of an enum member don't count.
+        enum Flags {
+            A = 1 << 0,
+            ~ [unused]
+            B = 1 << 1,
+            All = A | B,
+        }
+        use(Flags.B, Flags.All);
+    }
+}
+
+// Catches never-used symbol of any kind
+{
+    type T = number;
+         ~ [noread]
+}
+
 {
     function f() { return 0; }
              ~ [sideeffectonly]
@@ -11,8 +52,8 @@ declare function use(...args: any[]): void;
     f();
 }
 
+// Catches 'let' that could be 'const', just like for properties that could be 'readonly'.
 {
-    // Catches 'let' that could be 'const', just like for properties that could be 'readonly'.
     let x = 0;
         ~ [const]
     use(x);
@@ -113,6 +154,14 @@ declare function use(...args: any[]): void;
 
 // Prefer readonly collection types
 {
+    // Exception for rest parameters, which can't be ReadonlyArray
+    {
+        function _(x: number[], ...y: number[]) {
+                      ~~~~~~~~ [readonlyarray]
+            return [...x, ...y];
+        }
+    }
+
     // Uses inferred type if no type annotation -- handles unions too.
     {
         class C {
@@ -267,6 +316,7 @@ use(readonlyArray);
     const _x = 0;
 }
 
+[enummembernevercreated]: Enum member is compared against, but analysis found no cases of something being given this value.
 [const]: Analysis found no mutable uses of this variable; use `const`.
 [unused]: Analysis found no uses of this symbol.
 [private]: Analysis found no public uses; this should be private.

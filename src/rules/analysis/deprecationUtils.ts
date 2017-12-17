@@ -16,15 +16,14 @@
  */
 
 import * as ts from "typescript";
-import { getJsDoc, getDeclarationOfBindingElement, isSymbolFlagSet } from "tsutils";
+import { getJsDoc, getDeclarationOfBindingElement } from "tsutils";
+import { find } from '../../utils';
 
-//from deprecateionRule.ts
 export function getSymbolDeprecation(symbol: ts.Symbol): string | undefined {
-    if (symbol.getJsDocTags !== undefined) {
-        return findDeprecationTag(symbol.getJsDocTags());
-    }
-    // for compatibility with typescript@<2.3.0
-    return getDeprecationFromDeclarations(symbol.declarations);
+    return symbol.getJsDocTags !== undefined
+        ? findDeprecationTag(symbol.getJsDocTags())
+        // for compatibility with typescript@<2.3.0
+        : getDeprecationFromDeclarations(symbol.declarations);
 }
 
 function getDeprecationFromDeclarations(declarations?: ReadonlyArray<ts.Declaration>): string | undefined {
@@ -42,15 +41,11 @@ function getDeprecationFromDeclarations(declarations?: ReadonlyArray<ts.Declarat
         if (ts.isVariableDeclarationList(declaration)) {
             declaration = declaration.parent!;
         }
-        const result = getDeprecationFromDeclaration(declaration);
-        if (result !== undefined) {
-            return result;
-        }
+        return getDeprecationFromDeclaration(declaration);
     }
     return undefined;
 }
 
-//!
 export function getDeprecationFromDeclaration(declaration: ts.Node): string | undefined {
     for (const comment of getJsDoc(declaration)) {
         if (comment.tags === undefined) {
@@ -66,31 +61,16 @@ export function getDeprecationFromDeclaration(declaration: ts.Node): string | un
 }
 
 function findDeprecationTag(tags: ReadonlyArray<ts.JSDocTagInfo>): string | undefined {
-    for (const tag of tags) {
-        if (tag.name === "deprecated") {
-            return tag.text;
-        }
-    }
-    return undefined;
+    return find(tags, tag => tag.name === "deprecated" ? tag.text : undefined);
 }
 
-export function getSignatureDeprecation(signature?: ts.Signature): string | undefined {
+export function getSignatureDeprecation(signature: ts.Signature | undefined): string | undefined {
     if (signature === undefined) {
         return undefined;
     }
     if (signature.getJsDocTags !== undefined) {
         return findDeprecationTag(signature.getJsDocTags());
     }
-
     // for compatibility with typescript@<2.3.0
     return signature.declaration === undefined ? undefined : getDeprecationFromDeclaration(signature.declaration);
-}
-
-//mv
-export function skipAlias(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol {
-    const alias = tryGetAliasedSymbol(symbol, checker);
-    return alias === undefined ? symbol : alias;
-}
-export function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
-    return isSymbolFlagSet(symbol, ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : undefined;
 }

@@ -28,7 +28,7 @@ import {
 } from "tsutils";
 import * as ts from "typescript";
 import * as Lint from "../index";
-import { getSymbolDeprecation, getSignatureDeprecation } from './analysis/moarUtils';
+import { getSymbolDeprecation, getSignatureDeprecation } from './analysis/deprecationUtils';
 
 export class Rule extends Lint.Rules.TypedRule {
     /* tslint:disable:object-literal-sort-keys */

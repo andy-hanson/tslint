@@ -16,54 +16,35 @@
  */
 
 import assert = require("assert");
-import { hasModifier, isSymbolFlagSet, isTypeFlagSet, isExpression, isUnionType, isUnionOrIntersectionType } from "tsutils";
+import {
+    hasModifier,
+    isSymbolFlagSet,
+    isTypeFlagSet,
+    isExpression,
+    isTypeReference,
+    isUnionType,
+    isUnionOrIntersectionType,
+} from "tsutils";
 import * as ts from "typescript";
 
-import { getEqualsKind } from "../..";
-import { AccessFlags, accessFlags, SymbolInfo, multiMapAdd } from "./accessFlags";
-import { skipAlias } from './moarUtils';
+import { AccessFlags, accessFlags, SymbolInfo } from "./accessFlags";
+import { EnumAccessFlags, accessFlagsForEnumAccess } from "./enumAccessFlags";
+import { isUsageTrackedDeclaration, multiMapAdd, skipAlias } from "./utils";
+import {
+    getPropertySymbolOfObjectBindingPatternWithoutPropertyName,
+    getContainingObjectLiteralElement,
+    getPropertySymbolsFromContextualType,
+} from './referencesUtils';
 
 const infoCache = new WeakMap<ts.Program, AnalysisResult>();
 export function getInfo(program: ts.Program): AnalysisResult {
-    return createIfNotSet(infoCache, program, () => getInfoWorker(program));
-}
-
-function getInfoWorker(program: ts.Program): AnalysisResult {
-    const analyzer = new Analyzer(program.getTypeChecker());
-    //const allFiles = program.getSourceFiles().filter(f => !f.fileName.includes("lib"));
-    for (const file of program.getSourceFiles()) {
-        if (file.fileName.includes("lib")) continue;//kill
-        analyzer.analyze(file, file, undefined);
-    }
-    return analyzer.finish();
-}
-
-export type Tested = ts.NamedDeclaration & { readonly name: ts.Identifier };
-export function isTested(node: ts.Node): node is Tested {
-    switch (node.kind) {
-        case ts.SyntaxKind.PropertyDeclaration:
-        case ts.SyntaxKind.PropertySignature:
-        case ts.SyntaxKind.MethodSignature:
-        case ts.SyntaxKind.GetAccessor:
-        case ts.SyntaxKind.SetAccessor:
-        case ts.SyntaxKind.ModuleDeclaration:
-            type T = ts.PropertyDeclaration | ts.PropertySignature | ts.MethodSignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ModuleDeclaration;
-            return ts.isIdentifier((node as T).name);
-        case ts.SyntaxKind.MethodDeclaration:
-            const parent = node.parent!;
-            return !ts.isObjectLiteralExpression(parent) && ts.isIdentifier((node as ts.MethodDeclaration).name);
-        //test: we detect unused interface, enum, type
-        case ts.SyntaxKind.InterfaceDeclaration:
-        case ts.SyntaxKind.EnumDeclaration:
-        case ts.SyntaxKind.TypeAliasDeclaration:
-            return true;
-        case ts.SyntaxKind.FunctionDeclaration:
-            return (node as ts.FunctionDeclaration).name !== undefined;
-        case ts.SyntaxKind.VariableDeclaration:
-            return ts.isIdentifier((node as ts.VariableDeclaration).name);
-        default:
-            return false;
-    }
+    return createIfNotSet(infoCache, program, () => {
+        const analyzer = new Analyzer(program.getTypeChecker());
+        for (const file of program.getSourceFiles()) {
+            analyzer.analyze(file, file, undefined);
+        }
+        return analyzer.finish();
+    });
 }
 
 export class AnalysisResult {
@@ -96,40 +77,20 @@ export class AnalysisResult {
         });
     }
 
-    symbolIsPropertyOfTypeAssignedToSomehow(symbol: ts.Symbol, checker: ts.TypeChecker) { //better name
-        //why do these two get the containing type differently?
-        return this.isParentCastedTo(symbol) || this.isPropertyAssignedIndirectly(symbol, checker);
+    symbolIsIndirectlyAssignedProperty(symbol: ts.Symbol, checker: ts.TypeChecker) {
+        //why do these two get the containing type differently? Would be nice to calculate only once...
+        return isSymbolFlagSet(symbol, ts.SymbolFlags.Property) &&
+            (this.isParentCastedTo(symbol) || this.isPropertyAssignedIndirectly(symbol, checker));
     }
 
     private isParentCastedTo(symbol: ts.Symbol): boolean {
-        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property)) {
-            const parent = getParentOfPropertySymbol(symbol);
-            if (this.castedToTypes.has(parent)) {
-                return true;
-            }
-        }
-        return false;
+        return this.castedToTypes.has(getParentOfPropertySymbol(symbol));
     }
 
-    private isPropertyAssignedIndirectly(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-        //find things that are assigned to this type.
-        const sources = symbol.flags & ts.SymbolFlags.Property ? this.typeAssignmentsTargetToSource.get(getTypeContainingProperty(symbol, checker)) : undefined;
-        if (!sources) {
-            return false;
-        }
-
-        for (const source of sources) {//name
-            if (source.flags & ts.TypeFlags.Any) {
-                return true;
-            }
-            else {
-                const sourceProperty = checker.getPropertyOfType(source, symbol.name);
-                if (sourceProperty) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    private isPropertyAssignedIndirectly(propertySymbol: ts.Symbol, checker: ts.TypeChecker): boolean {
+        const sources = this.typeAssignmentsTargetToSource.get(getTypeContainingProperty(propertySymbol, checker))
+        return sources !== undefined && sources.some(source =>
+            isTypeFlagSet(source, ts.TypeFlags.Any) || checker.getPropertyOfType(source, propertySymbol.name) !== undefined);
     }
 
 }
@@ -184,7 +145,6 @@ function getTypeContainingProperty(symbol: ts.Symbol, checker: ts.TypeChecker): 
 }
 
 class Analyzer {
-    constructor(private readonly checker: ts.TypeChecker) {}
     private readonly symbolInfos = new Map<ts.Symbol, SymbolInfo>(); //name
     private readonly enumMembers = new Map<ts.Symbol, EnumAccessFlags>();
     private readonly localVariableAliases = new Map<ts.Symbol, ts.Symbol[]>();
@@ -192,14 +152,16 @@ class Analyzer {
     private readonly typeAssignmentsTargetToSource = new Map</*to*/ ts.Type, /*from*/ ts.Type[]>();
     private readonly castedToTypes = new Set<ts.Symbol>();
 
-    finish(): AnalysisResult {
+    constructor(private readonly checker: ts.TypeChecker) {}
+
+    public finish(): AnalysisResult {
         //todo: repeat until no changes (test)
         this.localVariableAliases.forEach((aliases, sym) => {
             const originalInfo = this.symbolInfos.get(sym)!;
             for (const alias of aliases) {
                 //todo: might be a private alias...
                 const aliasInfo = this.symbolInfos.get(alias)!;
-                if (aliasInfo.everUsedAsMutableCollection()) {//todo: public/private difference
+                if (aliasInfo.everUsedAsMutableCollection) {//todo: public/private difference
                     originalInfo.private |= AccessFlags.ReadWithMutableType;
                     originalInfo.public |= AccessFlags.ReadWithMutableType;
                 }
@@ -214,20 +176,11 @@ class Analyzer {
             this.castedToTypes);
     }
 
-    analyze(node: ts.Node, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
+    public analyze(node: ts.Node, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
         switch (node.kind) {
-            case ts.SyntaxKind.Identifier: {
-                const sym = this.checker.getSymbolAtLocation(node);
-                if (sym !== undefined) {
-                    const symbol = skipTransient(skipAlias(sym, this.checker));
-                    if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
-                        this.trackEnumMemberUse(node as ts.Identifier, symbol);
-                    } else {
-                        this.trackSymbolUse(node as ts.Identifier, symbol, currentFile, currentClass);
-                    }
-                }
-                return;
-            }
+            case ts.SyntaxKind.Identifier:
+                this.fooId(node as ts.Identifier, currentFile, currentClass);
+                break;
             case ts.SyntaxKind.VariableDeclaration: {
                 const { initializer, type } = node as ts.VariableDeclaration;
                 if (initializer !== undefined && type !== undefined) {
@@ -258,13 +211,27 @@ class Analyzer {
         //at any location, if there's a contextual type, it's a type assignment.
         if (isExpression(node)) {
             const ctx = this.checker.getContextualType(node);
-            if (ctx) {
+            if (ctx !== undefined) {
                 //don't need the help from accessFlags then?
                 this.addTypeAssignment(ctx, this.checker.getTypeAtLocation(node));
             }
         }
 
         node.forEachChild(child => this.analyze(child, currentFile, currentClass));
+    }
+
+    private fooId(node: ts.Identifier, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) { //name
+        const sym = this.checker.getSymbolAtLocation(node);
+        if (sym === undefined) {
+            return;
+        }
+
+        const symbol = skipTransient(skipAlias(sym, this.checker));
+        if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
+            this.trackEnumMemberUse(node, symbol);
+        } else {
+            this.trackSymbolUse(node, symbol, currentFile, currentClass);
+        }
     }
 
     private trackEnumMemberUse(node: ts.Identifier, symbol: ts.Symbol) {//needs much testing...
@@ -328,6 +295,7 @@ class Analyzer {
         const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
         const access = accessFlags(node, symbol, this.checker,
             aliasId => this.addAlias(aliasId, symbol),
+            //todo: probably don't need to pass that in since we handle that in the `isExpression` block in `analyze`
             (a, b) => {
                 this.addTypeAssignment(a, b)
             }); //neater
@@ -414,22 +382,6 @@ class Analyzer {
                 }
             }
         }
-
-        /*
-        if (ts.isTypeReferenceNode(t)) {
-            if (t.typeArguments) for (const arg of t.typeArguments) {
-                this.addCastToType(arg);
-            }
-            const sym = this.checker.getSymbolAtLocation(t.typeName)!;
-            assert(!!sym);
-            this.castedToTypes.add(sym);
-        } else {
-            t.forEachChild(child => {
-                if (ts.isTypeNode(child)) {
-                    this.addCastToType(child);
-                }
-            });
-        }*/
     }
 }
 
@@ -438,11 +390,6 @@ function zip<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>, cb: (a: T, b: T) => vo
     for (let i = 0; i < a.length; i++) {
         cb(a[i], b[i]);
     }
-}
-
-//already in tsutils?
-export function isTypeReference(type: ts.Type): type is ts.TypeReference {
-    return !!(type.flags & ts.TypeFlags.Object) && !!((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Reference);
 }
 
 function isPublicAccess(
@@ -469,7 +416,7 @@ function isPublicAccess(
 export function canBePrivate(dec: ts.Declaration): ts.SourceFile | ts.ClassLikeDeclaration | undefined { //name
     const decl = skipStuff(dec); //neater
     const parent = decl.parent!;
-    if (hasModifier(decl.modifiers, ts.SyntaxKind.ExportKeyword)) {
+    if (isExported(decl)) {
         return ts.isSourceFile(parent) ? parent : undefined;
     } else if (ts.isClassElement(decl)) {
         return ts.isClassLike(parent) ? parent : undefined;
@@ -497,195 +444,47 @@ function skipStuff(decl: ts.Declaration) {
 
 function isPublicTypeUse(node: ts.Identifier) {
     const parent = node.parent!;
-    if (isTested(parent) && parent.name === node) {
-        //the original declaration isn't a public use...
-        return false;
-    }
-    return isPublicTypeUseWorker(node);
+    // The original declaration isn't a public use.
+    return !(isUsageTrackedDeclaration(parent) && parent.name === node) && isPublicTypeUseWorker(parent);
 }
 
 function isPublicTypeUseWorker(node: ts.Node): boolean {
-    //true if we're inside of a type or function.
-    return node.kind !== ts.SyntaxKind.SourceFile
-        && (hasModifier(node.modifiers, ts.SyntaxKind.ExportKeyword) || isPublicTypeUseWorker(node.parent!));
+    switch (node.kind) {
+        case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.FunctionDeclaration:
+        case ts.SyntaxKind.ClassDeclaration:
+        case ts.SyntaxKind.ClassExpression:
+        case ts.SyntaxKind.InterfaceDeclaration:
+            return isExported(node);
+        default:
+            return (ts.isTypeNode(node) || ts.isClassElement(node) || ts.isTypeElement(node) || ts.isParameter(node))
+                && isPublicTypeUseWorker(node.parent!);
+    }
 }
 
-function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: () => V): V {
+//!
+function isExported(node: ts.Node): boolean {
+    return hasModifier(node.modifiers, ts.SyntaxKind.ExportKeyword);
+}
+
+function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: (key: K) => V): V {
     const already = map.get(key); //name
     if (already !== undefined) {
         return already;
     } else {
-        const value = createValue();
+        const value = createValue(key);
         map.set(key, value);
         return value;
     }
 }
 
-//mv to accessflags.ts
-export const enum EnumAccessFlags {
-    None = 0,
-    Tested = 2 ** 0,
-    UsedInExpression = 2 ** 1,
-}
-export function hasEnumAccessFlag(a: EnumAccessFlags, b: EnumAccessFlags): boolean {
-    return (a & b) !== EnumAccessFlags.None;
-}
-
-function accessFlagsForEnumAccess(n: ts.Identifier): EnumAccessFlags {
-    const parent0 = n.parent!;
-    if (ts.isEnumMember(parent0)) {
-        return EnumAccessFlags.None;
-    }
-
-    if (!ts.isPropertyAccessExpression(parent0)) {
-        //may be a binary expression if used inside the enum itself
-        assert(ts.isQualifiedName(parent0) || ts.isBinaryExpression(parent0));
-        return EnumAccessFlags.None; //used as a type, or used inside the enum itself
-    }
-
-    assert(ts.isPropertyAccessExpression(parent0));
-    const parent = parent0.parent!;
-    switch (parent.kind) {
-        case ts.SyntaxKind.CaseClause:
-            return EnumAccessFlags.Tested;
-        case ts.SyntaxKind.BinaryExpression:
-            return getEqualsKind((parent as ts.BinaryExpression).operatorToken) !== undefined
-                ? EnumAccessFlags.Tested
-                : EnumAccessFlags.UsedInExpression;
-        default:
-            return EnumAccessFlags.UsedInExpression;
-    }
-    /*switch (parent.kind) {
-        case ts.SyntaxKind.BinaryExpression: {
-            const { operatorToken } = parent as ts.BinaryExpression;
-            return isAssignmentOperator(operatorToken.kind) ? EnumAccessFlags.Tested : EnumAccessFlags.UsedInExpression;
-        }
-        //initializer
-        case ts.SyntaxKind.PropertyAssignment:
-        case ts.SyntaxKind.Parameter:
-        case ts.SyntaxKind.PropertyDeclaration:
-        case ts.SyntaxKind.VariableDeclaration:
-            return EnumAccessFlags.UsedInExpression;
-        default:
-            return EnumAccessFlags.Tested;
-    }*/
-}
-
-
-//function skipThings(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol { //name
-//    return skipTransient(skipPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, checker));
-//}
 
 function skipTransient(symbol: ts.Symbol): ts.Symbol {
     //todo: we shouldn't get these coming out of `getSymbolAtLocation`...
-    return isSymbolFlagSet(symbol, ts.SymbolFlags.Transient) ? (symbol as any).target || symbol : symbol;
-}
-
-
-
-
-
-//taken from findALlReferences.ts
-//TODO: should be a method on checker
-function getObjectBindingElementWithoutPropertyName(symbol: ts.Symbol): ts.BindingElement | undefined {
-    const bindingElement = symbol.declarations && symbol.declarations.find(ts.isBindingElement);
-    if (bindingElement &&
-        bindingElement.parent!.kind === ts.SyntaxKind.ObjectBindingPattern &&
-        !bindingElement.propertyName) {
-        return bindingElement;
+    if (isSymbolFlagSet(symbol, ts.SymbolFlags.Transient)) {
+        const target = (symbol as any).target;
+        return target === undefined ? symbol : target;
+    } else {
+        return symbol;
     }
-    return undefined; //neater
-}
-function getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
-    const bindingElement = getObjectBindingElementWithoutPropertyName(symbol);
-    if (!bindingElement) return undefined;
-
-    const typeOfPattern = checker.getTypeAtLocation(bindingElement.parent!);
-    const propSymbol = typeOfPattern && checker.getPropertyOfType(typeOfPattern, (<ts.Identifier>bindingElement.name).text);
-    if (propSymbol && isSymbolFlagSet(propSymbol, ts.SymbolFlags.Accessor)) {
-        // See GH#16922
-        assert(isSymbolFlagSet(propSymbol, ts.SymbolFlags.Transient));
-        return (propSymbol as any/*ts.TransientSymbol*/).target;
-    }
-    return propSymbol;
-}
-function getContainingObjectLiteralElement(node: ts.Node): ts.ObjectLiteralElement | undefined {
-    switch (node.kind) {
-        case ts.SyntaxKind.StringLiteral:
-        case ts.SyntaxKind.NumericLiteral:
-            if (node.parent!.kind === ts.SyntaxKind.ComputedPropertyName) {
-                return isObjectLiteralElement(node.parent!.parent!) ? node.parent!.parent as ts.ObjectLiteralElement : undefined;
-            }
-        // falls through
-        case ts.SyntaxKind.Identifier:
-            return isObjectLiteralElement(node.parent!) &&
-                (node.parent!.parent!.kind === ts.SyntaxKind.ObjectLiteralExpression || node.parent!.parent!.kind === ts.SyntaxKind.JsxAttributes) &&
-                (<ts.ObjectLiteralElement>node.parent).name === node ? node.parent as ts.ObjectLiteralElement : undefined;
-    }
-    return undefined;
-}
-function isObjectLiteralElement(node: ts.Node): node is ts.ObjectLiteralElement {
-    switch (node.kind) {
-        case ts.SyntaxKind.JsxAttribute:
-        case ts.SyntaxKind.JsxSpreadAttribute:
-        case ts.SyntaxKind.PropertyAssignment:
-        case ts.SyntaxKind.ShorthandPropertyAssignment:
-        case ts.SyntaxKind.MethodDeclaration:
-        case ts.SyntaxKind.GetAccessor:
-        case ts.SyntaxKind.SetAccessor:
-            return true;
-    }
-    return false;
-}
-/** Gets all symbols for one property. Does not get symbols for every property. */
-function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, checker: ts.TypeChecker): ReadonlyArray<ts.Symbol> {
-    const objectLiteral = <ts.ObjectLiteralExpression>node.parent; //todo: update typedef so don't need cast
-    const contextualType = checker.getContextualType(objectLiteral);
-    const name = getNameFromObjectLiteralElement(node);
-    if (name && contextualType) {
-        const result: ts.Symbol[] = [];
-        const symbol = contextualType.getProperty(name);
-        if (symbol) {
-            result.push(symbol);
-        }
-
-        if (isUnionType(contextualType)) {
-            for (const t of contextualType.types) {
-                const symbol = t.getProperty(name);
-                if (symbol) {
-                    result.push(symbol);
-                }
-            }
-        }
-        return result;
-    }
-    return [];
-}
-function getNameFromObjectLiteralElement(node: ts.ObjectLiteralElement): string | undefined {
-    const name = node.name!;
-    if (name.kind === ts.SyntaxKind.ComputedPropertyName) {
-        const nameExpression = (<ts.ComputedPropertyName>node.name).expression;
-        // treat computed property names where expression is string/numeric literal as just string/numeric literal
-        if (isStringOrNumericLiteral(nameExpression)) {
-            return (<ts.LiteralExpression>nameExpression).text;
-        }
-        return undefined;
-    }
-    return getTextOfIdentifierOrLiteral(name);
-}
-function getTextOfIdentifierOrLiteral(node: ts.Identifier | ts.LiteralLikeNode) {
-    if (node.kind === ts.SyntaxKind.Identifier) {
-        return node.text;
-    }
-    if (node.kind === ts.SyntaxKind.StringLiteral ||
-        node.kind === ts.SyntaxKind.NoSubstitutionTemplateLiteral || //todo: add this to ts version
-        node.kind === ts.SyntaxKind.NumericLiteral) {
-        return (node).text;
-    }
-    throw new Error("");//!
-}
-function isStringOrNumericLiteral(node: ts.Node): node is ts.StringLiteral | ts.NumericLiteral {
-    const kind = node.kind;
-    return kind === ts.SyntaxKind.StringLiteral
-        || kind === ts.SyntaxKind.NumericLiteral;
 }
