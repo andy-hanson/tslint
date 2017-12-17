@@ -41,7 +41,7 @@ export function accessFlagsForEnumAccess(node: ts.Identifier): EnumAccessFlags {
     }
 }
 
-function flagsForPropertyAccess(parent: ts.Node): EnumAccessFlags {//name
+function flagsForPropertyAccess(parent: ts.Node): EnumAccessFlags {
     switch (parent.kind) {
         case ts.SyntaxKind.CaseClause:
             return EnumAccessFlags.Tested;

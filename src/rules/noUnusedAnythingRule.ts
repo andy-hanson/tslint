@@ -29,10 +29,11 @@ import * as ts from "typescript";
 
 import * as Lint from "..";
 
-import { AnalysisResult, getInfo, canBePrivate } from "./analysis";
+import { AnalysisResult, getInfo } from "./analysis";
 import { SymbolInfo, isNameOfMutableCollectionType } from "./analysis/accessFlags";
 import { hasEnumAccessFlag, EnumAccessFlags } from "./analysis/enumAccessFlags";
 import { getDeprecationFromDeclaration } from "./analysis/deprecationUtils";
+import { getPrivacyScope } from "./analysis/privacy";
 import { isUsageTrackedDeclaration, UsageTrackedDeclaration } from "./analysis/utils";
 import { isNodeFlagSet } from 'tsutils';
 import { find } from '../utils';
@@ -128,7 +129,7 @@ class Walker extends Lint.AbstractWalker<Options> {
             // So, only check the property side.
             const prop = getPropertyOfParameterProperty(node, this.checker);
             if (prop !== undefined) {
-                this.handleSymbol(node as ts.ParameterDeclaration & { readonly name: ts.Identifier }, prop);
+                this.handleSymbol(node, prop);
             }
         }
         //TODO: for a signature, look into its implementers for uses
@@ -141,9 +142,7 @@ class Walker extends Lint.AbstractWalker<Options> {
     }
 
     private handleEnumMember(node: ts.EnumMember): void {
-        const sym = this.checker.getSymbolAtLocation(node.name)!;
-        const flag = this.analysis.enumMembers.get(sym); //name
-        const flags = flag === undefined ? EnumAccessFlags.None : flag;
+        const flags = this.analysis.getEnumAccessFlags(this.checker.getSymbolAtLocation(node.name)!);
         if (!hasEnumAccessFlag(flags, EnumAccessFlags.UsedInExpression)) {
             this.addFailureAtNode(node.name,
                 hasEnumAccessFlag(flags, EnumAccessFlags.Tested)
@@ -157,13 +156,7 @@ class Walker extends Lint.AbstractWalker<Options> {
             return;
         }
 
-        const info = this.analysis.symbolInfos.get(symbol);
-        if (info === undefined) {
-            this.addFailureAtNode(node, "Symbol is completely unused.");
-            //test -- don't we at least create the symbol??? So this should never happen?
-            return;
-        }
-
+        const info = this.analysis.getSymbolInfo(symbol);
         this.checkSymbolUses(node, symbol, info);
         this.checkCollectionUses(node, symbol, info);
     }
@@ -172,10 +165,10 @@ class Walker extends Lint.AbstractWalker<Options> {
         const fail = (f: string): void => { this.addFailureAtNode(node.name, f); };
 
         if (!info.everUsedPublicly) {
-            const x = canBePrivate(node);
-            if (x === undefined) {
-                fail("Analysis found no uses of this symbol."); //test
-            } else if (ts.isSourceFile(x)) {
+            const privacyScope = getPrivacyScope(node);
+            if (privacyScope === undefined) {
+                fail("Analysis found no uses of this symbol.");
+            } else if (ts.isSourceFile(privacyScope)) {
                 if (!isIsImplicitlyExported(node, this.sourceFile, this.checker)) {
                     fail("Analysis found no uses in other modules; this should not be exported.");
                 }
@@ -363,7 +356,12 @@ function isMutable(node: UsageTrackedDeclaration): boolean {
     }
 }
 
-function isOkToNotUse(node: UsageTrackedDeclaration, symbol: ts.Symbol, checker: ts.TypeChecker, ignoreNames: ReadonlySet<string>): boolean {
+function isOkToNotUse(
+    node: UsageTrackedDeclaration,
+    symbol: ts.Symbol,
+    checker: ts.TypeChecker,
+    ignoreNames: ReadonlySet<string>,
+): boolean {
     return isAmbient(node)
         || isIgnored(node)
         || isDeprecated(node)

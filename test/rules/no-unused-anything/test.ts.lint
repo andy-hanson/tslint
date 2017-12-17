@@ -67,15 +67,20 @@ declare function use(...args: any[]): void;
     use(new C().p);
 }
 
-// Casting indirectly creates properties
+//// Tests for indirect assignment of properties
 {
+    // Casting indirectly creates properties
     use((<{ readonly x: number }> any).x);
     use((any as { x: number }).x);
                   ~ [readonly]
-}
 
-//// Tests for indirect assignment of properties
-{
+    // Casting to T[] (or any generic type) casts to T too.
+    use((any as Array<{ readonly x: number}>)[0].x);
+
+    // Fills in properties of properties too.
+    use((any as { readonly x: { readonly y: { readonly z: number } } }).x.y.z);
+
+
     // Assigning a type to itself doesn't count.
     {
         interface I { x: number; }
@@ -143,11 +148,17 @@ declare function use(...args: any[]): void;
 // Privacy tests
 {
     class C {
+        static readonly zero = 0;
+                        ~~~~ [private]
         constructor(readonly x: number) {}
                              ~ [private]
 	    m() {
-	        use(this.x);
+	        this.n(this.x);
 	    }
+        n(x: number) {
+        ~ [private]
+            use(x, C.zero);
+        }
 	}
 	new C(0).m();
 }

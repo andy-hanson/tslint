@@ -15,8 +15,29 @@
  * limitations under the License.
  */
 
+import assert = require("assert");
 import * as ts from "typescript";
 import { isSymbolFlagSet } from 'tsutils';
+
+export function some<T>(iter: Iterable<T>, pred: (value: T) => boolean): boolean {
+    for (const value of iter) {
+        if (pred(value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export function zip<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>, cb: (a: T, b: T) => void): void {
+    assert(a.length === b.length);
+    for (let i = 0; i < a.length; i++) {
+        cb(a[i], b[i]);
+    }
+}
+
+export function tryCast<T, U extends T>(a: T, f: (t: T) => t is U): U | undefined {
+    return f(a) ? a : undefined;
+}
 
 // For now, only track declarations with identifier names.
 export type UsageTrackedDeclaration = ts.NamedDeclaration & { readonly name: ts.Identifier };
@@ -57,12 +78,12 @@ export function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker):
     return isSymbolFlagSet(symbol, ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : undefined;
 }
 
-export function multiMapAdd<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+export function multiMapAdd<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
     const values = map.get(key);
     if (values === undefined) {
-        map.set(key, [value]);
+        map.set(key, new Set([value]));
     } else {
-        values.push(value);
+        values.add(value);
     }
 }
 

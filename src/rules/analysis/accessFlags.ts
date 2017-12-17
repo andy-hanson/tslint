@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
- import assert = require("assert");
+import assert = require("assert");
 import * as ts from "typescript";
 import { isAssignmentKind, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
 import { isReadonlyType } from "../noUnusedAnythingRule";
@@ -25,8 +25,12 @@ export class SymbolInfo {
     public private = AccessFlags.None;
     public public = AccessFlags.None;
 
+    get everUsedPublicly(): boolean {
+        return this.public !== AccessFlags.None;
+    }
+
     get everUsedAsMutableCollection(): boolean {
-        return this.has(AccessFlags.MutateCollectionEitherWay);
+        return this.has(AccessFlags.ReadWithMutableType | AccessFlags.MutateCollection);
     }
 
     get everUsedForSideEffect(): boolean {
@@ -34,15 +38,11 @@ export class SymbolInfo {
     }
 
     get everCreatedOrWritten(): boolean {
-        return this.has(AccessFlags.AnyCreate | AccessFlags.Write);
+        return this.has(AccessFlags.CreateFresh | AccessFlags.CreateAlias | AccessFlags.Write);
     }
 
     get everWritten(): boolean {
         return this.has(AccessFlags.Write);
-    }
-
-    get everUsedPublicly(): boolean {
-        return this.public !== AccessFlags.None;
     }
 
     get everRead(): boolean {
@@ -76,12 +76,10 @@ export const enum AccessFlags {
     CreateFresh = 2 ** 4,
     /** Creates it as in `x = f()` (may be an alias) */
     CreateAlias = 2 ** 5,
-    //Calling `f()` uses it for a side effect, but doesn't touch the return value.
+    /** Calling `f()` uses it for a side effect, but doesn't touch the return value. */
     SideEffect = 2 ** 6,
 
-    AnyCreate = CreateFresh | CreateAlias,
     ReadEitherWay = ReadReadonly | ReadWithMutableType,
-    MutateCollectionEitherWay = ReadWithMutableType | MutateCollection,
 }
 function hasAccessFlag(a: AccessFlags, b: AccessFlags): boolean {
     return (a & b) !== AccessFlags.None;
@@ -280,23 +278,17 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.ElementAccessExpression: {
                 const { expression, argumentExpression } = parent as ts.ElementAccessExpression;
                 if (node === argumentExpression) {
-                    //used as the index
+                    // Used as the index
                     return AccessFlags.ReadReadonly;
                 }
                 else {
                     assert(node === expression);
-                    //don't add alias for the parent, and symbol shouldn't matter
+                    // Don't add an alias for the parent, since this is for an element of the array.
                     const parentFlags = this.work(parent as ts.ElementAccessExpression, undefined, /*shouldAddAlias*/ false);
-                    let flags = AccessFlags.None;
-                    if (hasAccessFlag(parentFlags, AccessFlags.Write)) {
-                        //writes an element of the array (test)
-                        flags |= AccessFlags.MutateCollection;
-                    }
-                    if (hasAccessFlag(parentFlags, AccessFlags.ReadEitherWay)) {
-                        //reads an element of the array (test)
-                        flags |= AccessFlags.ReadReadonly;
-                    }
-                    return flags;
+                    // Read/write an element of the array
+                    const read = hasAccessFlag(parentFlags, AccessFlags.ReadEitherWay) ? AccessFlags.ReadReadonly : AccessFlags.None;
+                    const write = hasAccessFlag(parentFlags, AccessFlags.Write) ? AccessFlags.MutateCollection : AccessFlags.None;
+                    return write | read;
                 }
             }
 

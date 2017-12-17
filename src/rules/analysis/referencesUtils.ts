@@ -19,6 +19,8 @@ import assert = require("assert");
 import { isSymbolFlagSet, isUnionType } from "tsutils";
 import * as ts from "typescript";
 
+import { tryCast } from "./utils";
+
 // TODO: These utilities are from findAllReferences.ts in the TypeScript repo -- they could be made public.
 
 function getObjectBindingElementWithoutPropertyName(symbol: ts.Symbol): ts.BindingElement | undefined {
@@ -124,8 +126,4 @@ function getNameFromObjectLiteralElement(node: ts.ObjectLiteralElement): string 
 
 function isStringOrNumericLiteral(node: ts.Node): node is ts.StringLiteral | ts.NumericLiteral {
     return node.kind === ts.SyntaxKind.StringLiteral || node.kind === ts.SyntaxKind.NumericLiteral;
-}
-
-function tryCast<T, U extends T>(a: T, f: (t: T) => t is U): U | undefined {
-    return f(a) ? a : undefined;
 }
