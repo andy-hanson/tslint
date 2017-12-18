@@ -21,48 +21,49 @@ import { isAssignmentKind, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
 import { isReadonlyType } from "../noUnusedAnythingRule";
 import { assertNever } from "./utils";
 
-export class SymbolInfo {
-    public private = AccessFlags.None;
-    public public = AccessFlags.None;
+//todo: dual mutable / readonly types
+export class SymbolUses {
+    public private = Use.None;
+    public public = Use.None;
 
     get everUsedPublicly(): boolean {
-        return this.public !== AccessFlags.None;
+        return this.public !== Use.None;
     }
 
     get everUsedAsMutableCollection(): boolean {
-        return this.has(AccessFlags.ReadWithMutableType | AccessFlags.MutateCollection);
+        return this.has(Use.ReadWithMutableType | Use.MutateCollection);
     }
 
     get everUsedForSideEffect(): boolean {
-        return this.has(AccessFlags.SideEffect);
+        return this.has(Use.SideEffect);
     }
 
     get everCreatedOrWritten(): boolean {
-        return this.has(AccessFlags.CreateFresh | AccessFlags.CreateAlias | AccessFlags.Write);
+        return this.has(Use.CreateFresh | Use.CreateAlias | Use.Write);
     }
 
     get everWritten(): boolean {
-        return this.has(AccessFlags.Write);
+        return this.has(Use.Write);
     }
 
     get everRead(): boolean {
-        return this.has(AccessFlags.ReadEitherWay);
+        return this.has(Use.ReadEitherWay);
     }
 
     get mutatesCollection(): boolean {
-        return this.has(AccessFlags.MutateCollection);
+        return this.has(Use.MutateCollection);
     }
 
     get everAssignedANonFreshValue(): boolean {
-        return this.has(AccessFlags.CreateAlias);
+        return this.has(Use.CreateAlias);
     }
 
-    private has(flag: AccessFlags): boolean {
-        return hasAccessFlag(this.private | this.public, flag);
+    private has(flag: Use): boolean {
+        return hasUse(this.private | this.public, flag);
     }
 }
 
-export const enum AccessFlags {
+export const enum Use {
     None = 0,
     /** Only reads from a variable. */
     ReadReadonly = 2 ** 0,
@@ -81,29 +82,28 @@ export const enum AccessFlags {
 
     ReadEitherWay = ReadReadonly | ReadWithMutableType,
 }
-function hasAccessFlag(a: AccessFlags, b: AccessFlags): boolean {
-    return (a & b) !== AccessFlags.None;
+function hasUse(a: Use, b: Use): boolean {
+    return (a & b) !== Use.None;
 }
 
-export function accessFlags(
+export function getUse(
     node: ts.Identifier,
     symbol: ts.Symbol,
     checker: ts.TypeChecker,
     addAlias: (id: ts.Identifier) => void,
-): AccessFlags {
-    return new AccessFlagsChecker(checker, addAlias).work(node, symbol, true);
+): Use {
+    return new UseChecker(checker, addAlias).work(node, symbol, true);
 }
-class AccessFlagsChecker {
+class UseChecker {
     constructor(private readonly checker: ts.TypeChecker, private readonly addAlias: (id: ts.Identifier) => void) {}
 
-    public work(node: ts.Expression, symbol: ts.Symbol | undefined, shouldAddAlias: boolean): AccessFlags {
+    public work(node: ts.Expression, symbol: ts.Symbol | undefined, shouldAddAlias: boolean): Use {
         const parent = node.parent!;
         switch (parent.kind) {
             case ts.SyntaxKind.AsExpression:
             case ts.SyntaxKind.TypeAssertionExpression:
             case ts.SyntaxKind.NonNullExpression:
             case ts.SyntaxKind.ParenthesizedExpression:
-                //use addtypeassignment here?
                 type T = ts.AsExpression | ts.TypeAssertion | ts.NonNullExpression | ts.ParenthesizedExpression;
                 return this.work(parent as T, symbol, shouldAddAlias);
 
@@ -120,22 +120,21 @@ class AccessFlagsChecker {
                         const collectionMutateKind = getCollectionMutateKind(name.text);
                         switch (collectionMutateKind) {
                             case CollectionMutateKind.None:
-                                return AccessFlags.ReadReadonly;
+                                return Use.ReadReadonly;
                             case CollectionMutateKind.ReturnCollection:
-                                return this.work(gp, symbol, shouldAddAlias) | AccessFlags.MutateCollection;
+                                return this.work(gp, symbol, shouldAddAlias) | Use.MutateCollection;
                             case CollectionMutateKind.ReturnData:
                                 //gets data in addition to mutating the collection, so recurse to see if that data is used.
-                                return this.work(gp, symbol, shouldAddAlias) | AccessFlags.MutateCollection;
+                                return this.work(gp, symbol, shouldAddAlias) | Use.MutateCollection;
                             case CollectionMutateKind.ReturnNonUseful:
                                 //returns the length of the collection,
                                 //but if that's all you're getting, having the collection is stupid, so mark as readonly
-                                return AccessFlags.MutateCollection;
+                                return Use.MutateCollection;
                             default:
                                 return assertNever(collectionMutateKind);
                         }
-                        //mutatingMethodNames.has(name.text) ? AccessFlags.MutateCollection : AccessFlags.ReadReadonly;
                     } else {
-                        return AccessFlags.ReadReadonly;
+                        return Use.ReadReadonly;
                     }
                 }
             }
@@ -147,31 +146,31 @@ class AccessFlagsChecker {
                     : symbol !== undefined && isSymbolFlagSet(symbol, ts.SymbolFlags.Method | ts.SymbolFlags.Function)
                         // For a callable, we analyze the return type to see if it's used mutably.
                         ? this.work(parent as ts.CallExpression, symbol, shouldAddAlias)
-                        : AccessFlags.ReadReadonly;
+                        : Use.ReadReadonly;
             }
             case ts.SyntaxKind.NewExpression:
                 return node !== (parent as ts.NewExpression).expression
                     ? this.fromContext(node)
-                    : AccessFlags.ReadReadonly;
+                    : Use.ReadReadonly;
 
             case ts.SyntaxKind.FunctionExpression:
                 assert(node === (parent as ts.FunctionExpression).name);
-                return AccessFlags.None; // Doesn't matter, we won't analyze a function expression anyway.
+                return Use.None; // Doesn't matter, we won't analyze a function expression anyway.
 
             case ts.SyntaxKind.PostfixUnaryExpression:
             case ts.SyntaxKind.PrefixUnaryExpression:
                 const { operator } = parent as ts.PrefixUnaryExpression | ts.PostfixUnaryExpression;
                 return operator === ts.SyntaxKind.PlusPlusToken || operator === ts.SyntaxKind.MinusMinusToken
                     ? writeOrReadWrite(node, symbol)
-                    : AccessFlags.ReadReadonly;
+                    : Use.ReadReadonly;
 
             case ts.SyntaxKind.ExpressionStatement:
-                return AccessFlags.SideEffect;
+                return Use.SideEffect;
 
             case ts.SyntaxKind.VariableDeclaration: {
                 const { initializer, name, parent: gp } = parent as ts.VariableDeclaration; //name
                 if (node === name) {
-                    return ts.isVariableStatement(gp!.parent!) ? createFlag(initializer) : AccessFlags.CreateAlias;
+                    return ts.isVariableStatement(gp!.parent!) ? createFlag(initializer) : Use.CreateAlias;
                 } else {
                     assert(node === initializer);
                     const addedAlias = ts.isIdentifier(name) && shouldAddAlias;
@@ -191,7 +190,7 @@ class AccessFlagsChecker {
                 if (operatorToken.kind === ts.SyntaxKind.EqualsToken) {
                     return node === left
                         // `x = ...` is a write.
-                        ? AccessFlags.Write
+                        ? Use.Write
                         // `... = x` means we are assigning this to something else,
                         // and need the contextual type to know if it's used as a readonly collection.
                         // When assigning to an existing variable there should always be a contextual type, so no need to track an alias.
@@ -201,12 +200,12 @@ class AccessFlagsChecker {
                         // `x += ...` is treated as a write, and also as a read if it appears in another expression as in `f(x += 1)`.
                         ? writeOrReadWrite(node, symbol)
                         // `... += x` is a pure read.
-                        : AccessFlags.ReadReadonly;
+                        : Use.ReadReadonly;
                 }
             }
 
             case ts.SyntaxKind.DeleteExpression:
-                return AccessFlags.Write;
+                return Use.Write;
 
             case ts.SyntaxKind.PropertyDeclaration: {
                 const { name, initializer } = parent as ts.PropertyDeclaration;
@@ -217,13 +216,13 @@ class AccessFlagsChecker {
                 const { name, propertyName } = parent as ts.ExportSpecifier;
                 //todo: add an alias
                 if (propertyName === undefined) {
-                    return AccessFlags.CreateAlias | AccessFlags.ReadReadonly; //todo; better -- one symbol is created, another read
+                    return Use.CreateAlias | Use.ReadReadonly; //todo; better -- one symbol is created, another read
                 }
-                return node === name ? AccessFlags.ReadReadonly : AccessFlags.Write;
+                return node === name ? Use.ReadReadonly : Use.Write;
             }
 
             case ts.SyntaxKind.PropertySignature:
-                return AccessFlags.None;
+                return Use.None;
 
             case ts.SyntaxKind.TypeAliasDeclaration:
             case ts.SyntaxKind.ModuleDeclaration:
@@ -243,7 +242,7 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.MethodDeclaration:
             case ts.SyntaxKind.GetAccessor:
             case ts.SyntaxKind.SetAccessor:
-                return AccessFlags.CreateFresh;
+                return Use.CreateFresh;
 
             case ts.SyntaxKind.ComputedPropertyName:
             case ts.SyntaxKind.IfStatement:
@@ -266,30 +265,30 @@ class AccessFlagsChecker {
             case ts.SyntaxKind.EnumMember:
             case ts.SyntaxKind.TypePredicate:
             case ts.SyntaxKind.TypeReference:
-                return AccessFlags.ReadReadonly;
+                return Use.ReadReadonly;
 
             case ts.SyntaxKind.ElementAccessExpression: {
                 const { expression, argumentExpression } = parent as ts.ElementAccessExpression;
                 if (node === argumentExpression) {
                     // Used as the index
-                    return AccessFlags.ReadReadonly;
+                    return Use.ReadReadonly;
                 }
                 else {
                     assert(node === expression);
                     // Don't add an alias for the parent, since this is for an element of the array.
                     const parentFlags = this.work(parent as ts.ElementAccessExpression, undefined, /*shouldAddAlias*/ false);
                     // Read/write an element of the array
-                    const read = hasAccessFlag(parentFlags, AccessFlags.ReadEitherWay) ? AccessFlags.ReadReadonly : AccessFlags.None;
-                    const write = hasAccessFlag(parentFlags, AccessFlags.Write) ? AccessFlags.MutateCollection : AccessFlags.None;
+                    const read = hasUse(parentFlags, Use.ReadEitherWay) ? Use.ReadReadonly : Use.None;
+                    const write = hasUse(parentFlags, Use.Write) ? Use.MutateCollection : Use.None;
                     return write | read;
                 }
             }
 
             case ts.SyntaxKind.ConditionalExpression:
-                return node === (parent as ts.ConditionalExpression).condition ? AccessFlags.ReadReadonly : this.fromContext(node);
+                return node === (parent as ts.ConditionalExpression).condition ? Use.ReadReadonly : this.fromContext(node);
 
             case ts.SyntaxKind.Parameter:
-                return node === (parent as ts.ParameterDeclaration).name ? AccessFlags.CreateAlias : this.fromContext(node);
+                return node === (parent as ts.ParameterDeclaration).name ? Use.CreateAlias : this.fromContext(node);
 
             case ts.SyntaxKind.ArrayLiteralExpression:
             case ts.SyntaxKind.ReturnStatement:
@@ -299,7 +298,7 @@ class AccessFlagsChecker {
 
             case ts.SyntaxKind.ShorthandPropertyAssignment:
                 //If this is the property symbol, this creates it. Otherwise this is reading a local variable.
-                return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? AccessFlags.CreateAlias : this.fromContext(node);
+                return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.CreateAlias : this.fromContext(node);
 
             case ts.SyntaxKind.PropertyAssignment: {
                 const { name, initializer } = parent as ts.PropertyAssignment;
@@ -310,14 +309,14 @@ class AccessFlagsChecker {
                 //we might be reading it for a mutable type...
                 //todo: actually create an alias
                 //this aliases a property of the contextual type of the binding element
-                return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? AccessFlags.ReadReadonly : AccessFlags.CreateAlias;
+                return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.ReadReadonly : Use.CreateAlias;
 
             default:
                 throw new Error(`TODO: handle ${ts.SyntaxKind[parent.kind]}`);
         }
     }
 
-    private fromContext(node: ts.Expression, addedAlias = false): AccessFlags {
+    private fromContext(node: ts.Expression, addedAlias = false): Use {
         // In all other locations: if provided to a context with a readonly type, not a mutable use.
         // `function f(): ReadonlyArray<number> { return x; }` uses `x` readonly, `funciton f(): number[]` does not.
         const contextualType = this.checker.getContextualType(node); //uncast
@@ -325,23 +324,23 @@ class AccessFlagsChecker {
         if (contextualType === undefined) {
             // If there's no contextual type, be pessimistic.
             //but for variable declaration be optimistic because we just added an alias (test)
-            return addedAlias ? AccessFlags.ReadReadonly : AccessFlags.ReadWithMutableType;
+            return addedAlias ? Use.ReadReadonly : Use.ReadWithMutableType;
         } else if (isTypeFlagSet(contextualType, ts.TypeFlags.Any)) {
             // Assume that it's OK to pass a readonly collection to 'any'
-            return AccessFlags.ReadReadonly;
+            return Use.ReadReadonly;
         } else {
-            return !isReadonlyType(contextualType) ? AccessFlags.ReadWithMutableType : AccessFlags.ReadReadonly;
+            return !isReadonlyType(contextualType) ? Use.ReadWithMutableType : Use.ReadReadonly;
         }
     }
 }
 
 
-function createFlag(initializer: ts.Expression | undefined): AccessFlags {
+function createFlag(initializer: ts.Expression | undefined): Use {
     return initializer === undefined
-        ? AccessFlags.None
+        ? Use.None
         : isFreshCollection(initializer)
-        ? AccessFlags.CreateFresh
-        : AccessFlags.CreateAlias;
+        ? Use.CreateFresh
+        : Use.CreateAlias;
 }
 function isFreshCollection(initializer: ts.Expression): boolean {
     return ts.isArrayLiteralExpression(initializer) ||
@@ -355,13 +354,13 @@ export function isNameOfMutableCollectionType(name: string): boolean {
 }
 const mutableCollectionTypeNames: ReadonlySet<string> = new Set(["Array", "Set", "Map"]);
 
-function writeOrReadWrite(node: ts.Node, symbol: ts.Symbol | undefined): AccessFlags { //name
+function writeOrReadWrite(node: ts.Node, symbol: ts.Symbol | undefined): Use { //name
     // If grandparent is not an ExpressionStatement, this is used as an expression in addition to having a side effect.
     const shouldRead = node.parent!.parent!.kind !== ts.SyntaxKind.ExpressionStatement;
     // In all the places this function is called, we are using an operator like `++` or `+=`,
     // so no need to worry about collection freshness.
-    const flags = symbol !== undefined && isInOwnConstructor(node, symbol) ? AccessFlags.CreateFresh : AccessFlags.Write;
-    return shouldRead ? flags | AccessFlags.ReadReadonly : flags;
+    const flags = symbol !== undefined && isInOwnConstructor(node, symbol) ? Use.CreateFresh : Use.Write;
+    return shouldRead ? flags | Use.ReadReadonly : flags;
 }
 
 // Write usage of a property is "readonly" if it appears in a constructor.

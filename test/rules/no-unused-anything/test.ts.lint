@@ -144,6 +144,55 @@ declare function use(...args: any[]): void;
         use(i.x);
     }
 }
+// Conversely: tests for indirect use of properties
+{
+    // Assigning to a readonly property is a readonly use
+    {
+        class C {
+            constructor(public x: number) {}
+                               ~ [readonly]
+        }
+        interface I {
+            readonly x: number;
+        }
+        const i: I = new C(0);
+        use(i.x);
+    }
+    // Assigning to a mutable property is a mutable use
+    {
+        class C {
+            constructor(public x: number) {}
+        }
+        interface I {
+            x: number;
+        }
+        const i: I = new C(0);
+        use(i.x++);
+    }
+    {
+        class C {
+            constructor(readonly x: number[]) {}
+                                    ~~~~~~~~ [readonlyarray]
+        }
+        interface I {
+            readonly x: ReadonlyArray<number>;
+        }
+        const i: I = new C([]);
+        use(i.x);
+    }
+    // No error if the type it's assigned to isn't a readonly collection
+    {
+        class C {
+            constructor(readonly x: number[]) {}
+        }
+        interface I {
+            readonly x: number[];
+        }
+        const i: I = new C([]);
+        i.x.push(0);
+        use(i.x);
+    }
+}
 
 // Privacy tests
 {

@@ -18,7 +18,6 @@
 import {
     getVariableDeclarationKind,
     hasModifier,
-    isSignatureDeclaration,
     isSymbolFlagSet,
     isTypeFlagSet,
     isTypeReference,
@@ -30,13 +29,14 @@ import * as ts from "typescript";
 import * as Lint from "..";
 
 import { AnalysisResult, getInfo } from "./analysis";
-import { SymbolInfo, isNameOfMutableCollectionType } from "./analysis/accessFlags";
-import { hasEnumAccessFlag, EnumAccessFlags } from "./analysis/enumAccessFlags";
 import { getDeprecationFromDeclaration } from "./analysis/deprecationUtils";
+import { hasEnumUse, EnumUse } from "./analysis/enumUse";
 import { getPrivacyScope } from "./analysis/privacy";
+import { SymbolUses, isNameOfMutableCollectionType } from "./analysis/use";
 import { isUsageTrackedDeclaration, UsageTrackedDeclaration } from "./analysis/utils";
 import { isNodeFlagSet } from 'tsutils';
 import { find } from '../utils';
+import { isImplicitlyExported } from './analysis/importUtils';
 
 export class Rule extends Lint.Rules.TypedRule {
     /* tslint:disable:object-literal-sort-keys */
@@ -109,113 +109,102 @@ class Walker extends Lint.AbstractWalker<Options> {
         switch (node.kind) {
             case ts.SyntaxKind.Parameter:
                 if (ts.isIdentifier((node as ts.ParameterDeclaration).name)) {
-                    this.handleParameter(node as NamedParameter);
+                    this.checkParameter(node as NamedParameter);
                 }
                 break;
             case ts.SyntaxKind.EnumMember:
-                this.handleEnumMember(node as ts.EnumMember);
+                this.checkEnumMember(node as ts.EnumMember);
                 break;
             default:
                 if (isUsageTrackedDeclaration(node)) {
-                    this.handleSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
+                    this.checkSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
                 }
         }
         node.forEachChild(child => this.walk(child));
     }
 
-    private handleParameter(node: NamedParameter): void { //name
+    private checkParameter(node: NamedParameter): void { //name
         if (ts.isParameterPropertyDeclaration(node)) {
             // Don't care if the parameter side is unused, since it's used to create the property.
             // So, only check the property side.
             const prop = getPropertyOfParameterProperty(node, this.checker);
             if (prop !== undefined) {
-                this.handleSymbol(node, prop);
+                this.checkSymbol(node, prop);
             }
         }
-        //TODO: for a signature, look into its implementers for uses
-        else if (!!(node.parent! as any).body //obs a parameter in a signature isn't "used"
+        // If there's no body we can't check whether the parameter is used.
+        else if (!!(node.parent! as any).body
             && ts.isIdentifier(node.name)
-            && node.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { //todo: handle 'this'
-            //tslint:disable-next-line no-unused-anything
-            this.handleSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
+            && node.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { // Todo: handle 'this'
+            this.checkSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
         }
     }
 
-    private handleEnumMember(node: ts.EnumMember): void {
+    private checkEnumMember(node: ts.EnumMember): void {
         const flags = this.analysis.getEnumAccessFlags(this.checker.getSymbolAtLocation(node.name)!);
-        if (!hasEnumAccessFlag(flags, EnumAccessFlags.UsedInExpression)) {
+        if (!hasEnumUse(flags, EnumUse.UsedInExpression)) {
             this.addFailureAtNode(node.name,
-                hasEnumAccessFlag(flags, EnumAccessFlags.Tested)
+                hasEnumUse(flags, EnumUse.Tested)
                 ? "Enum member is compared against, but analysis found no cases of something being given this value."
                 : "Analysis found no uses of this symbol.");
         }
     }
 
-    private handleSymbol(node: UsageTrackedDeclaration, symbol: ts.Symbol): void {
+    private checkSymbol(node: UsageTrackedDeclaration, symbol: ts.Symbol): void {
         if (isOkToNotUse(node, symbol, this.checker, this.options.ignoreNames)) {
             return;
         }
 
-        const info = this.analysis.getSymbolInfo(symbol);
+        const info = this.analysis.getSymbolUses(symbol);
         this.checkSymbolUses(node, symbol, info);
-        this.checkCollectionUses(node, symbol, info);
+        if (!info.everUsedAsMutableCollection) {
+            this.warnOnNonMutatedCollection(node);
+        }
     }
 
-    private checkSymbolUses(node: UsageTrackedDeclaration, symbol: ts.Symbol, info: SymbolInfo): void {
-        const fail = (f: string): void => { this.addFailureAtNode(node.name, f); };
+    private checkSymbolUses(node: UsageTrackedDeclaration, symbol: ts.Symbol, uses: SymbolUses): void {
+        const fail = (failure: string): void => { this.addFailureAtNode(node.name, failure); };
 
-        if (!info.everUsedPublicly) {
+        if (!uses.everUsedPublicly) {
             const privacyScope = getPrivacyScope(node);
             if (privacyScope === undefined) {
                 fail("Analysis found no uses of this symbol.");
             } else if (ts.isSourceFile(privacyScope)) {
-                if (!isIsImplicitlyExported(node, this.sourceFile, this.checker)) {
+                if (!isImplicitlyExported(node, this.sourceFile, this.checker)) {
                     fail("Analysis found no uses in other modules; this should not be exported.");
                 }
             } else {
-                //todo: test that we handle completely unused abstract method
-                if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)
-                    //may need to be public due to assigning this to an interface
-                    && !this.analysis.isPropertyUsedForAssignment(symbol, this.checker)) {
+                if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
                     fail("Analysis found no public uses; this should be private.");
                 }
             }
-            return;
-        } else if (!info.everRead) {
+        } else if (!uses.everRead) {
             //might be a fn used for a side effect.
-            if (info.everUsedForSideEffect && isFunctionLike(symbol)) {
+            if (uses.everUsedForSideEffect && isFunctionLike(symbol)) {
                 const sig = this.checker.getSignatureFromDeclaration(symbol.valueDeclaration as ts.SignatureDeclaration)!;
                 if (!isTypeFlagSet(this.checker.getReturnTypeOfSignature(sig), ts.TypeFlags.Void)) {
                     fail("This function is used for its side effect, but the return value is never used.");
                 }
             } else {
-                if (info.mutatesCollection) {
-                    if (!info.everAssignedANonFreshValue) {
+                if (uses.mutatesCollection) {
+                    if (!uses.everAssignedANonFreshValue) {
                         fail("This collection is created and filled with values, but never read from.");
                     }
                 }
                 else {
-                    if (!this.analysis.isPropertyUsedForAssignment(symbol, this.checker)) {
-                        fail("This symbol is given a value, but analysis found no reads. This is likely dead code.");
-                    }
+                    fail("This symbol is given a value, but analysis found no reads. This is likely dead code.");
                 }
             }
-        } else if (!info.everWritten && isMutable(node)) {
+        } else if (!uses.everWritten && isMutable(node)) {
             fail(ts.isVariableDeclaration(node)
                 ? "Analysis found no mutable uses of this variable; use `const`." //tests
                 : "Analysis found no writes to this property; mark it as `readonly`.");
-        } else if (
-            !info.everCreatedOrWritten
-            && !this.analysis.symbolIsIndirectlyAssignedProperty(symbol, this.checker)) {
+        } else if (!uses.everCreatedOrWritten) {
             fail("Analysis found places where this is read, but found no places where it is given a value.");
         }
     }
 
-    private checkCollectionUses(node: UsageTrackedDeclaration, symbol: ts.Symbol, symbolInfo: SymbolInfo): void {
-        if (symbolInfo.everUsedAsMutableCollection) {
-            return;
-        }
-
+    private warnOnNonMutatedCollection(node: UsageTrackedDeclaration): void {
         if (ts.isParameter(node) && node.dotDotDotToken !== undefined) {
             // Can't recommend to use `...args: ReadonlyArray<number>`.
             // See https://github.com/Microsoft/TypeScript/issues/15972
@@ -228,25 +217,12 @@ class Walker extends Lint.AbstractWalker<Options> {
                 ? getMutableCollectionTypeFromType(this.checker.getTypeAtLocation(node.name))
                 : undefined
             : getMutableCollectionTypeFromNode(typeNode);
-        if (info === undefined) {
-            return;
+        if (info !== undefined) {
+            this.addFailureAtNode(
+                typeof info === "string" ? node.name : info.typeNode,
+                `Analysis indicates this could be a Readonly${typeof info === "string" ? info : info.typeName}.`);
         }
-
-        //For a property: but this type might be assigned to another type, and that other type might have this property mutable (test)
-        //todo: also for method (test)
-        if (isSymbolFlagSet(symbol, ts.SymbolFlags.Property) && this.analysis.isPropertyAssignedToMutableCollection(symbol, this.checker)) {
-            return;
-        }
-
-        this.addFailureAtNode(
-            typeof info === "string" ? node.name : info.typeNode,
-            preferReadonly(typeof info === "string" ? info : info.typeName));
     }
-}
-
-//!
-function preferReadonly(typeName: string): string {
-    return `Analysis indicates this could be a Readonly${typeName}.`;
 }
 
 // For class property or export, warn if the implicit type is ReadonlyArray.
@@ -283,10 +259,16 @@ function getMutableCollectionTypeFromType(type: ts.Type): string | undefined {
 }
 //mostly dup of above, break out a utility?
 export function isReadonlyType(type: ts.Type): boolean {
+    //Allow 'any'
+    //todo: use && and || and whatnot
+    if (isTypeFlagSet(type, ts.TypeFlags.Any)) {
+        return true;
+    }
     if (isUnionOrIntersectionType(type)) {
         return type.types.some(isReadonlyType);
     }
     if (isTypeReference(type)) {
+        //todo: try just `type.symbol !== undefined && type.symbol.name.startsWith("Readonly")
         const { symbol } = type.target;
         return symbol !== undefined && symbol.name.startsWith("Readonly");
     }
@@ -412,73 +394,4 @@ type NamedParameter =  ts.ParameterDeclaration & { readonly name: ts.Identifier 
 function getPropertyOfParameterProperty(p: NamedParameter, checker: ts.TypeChecker): ts.Symbol {
     return checker.getSymbolsOfParameterPropertyDeclaration(p, p.name.text).find(s =>
             isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
-}
-
-
-function isIsImplicitlyExported(node: UsageTrackedDeclaration, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
-    switch (node.kind) {
-        case ts.SyntaxKind.TypeAliasDeclaration:
-        case ts.SyntaxKind.InterfaceDeclaration:
-        case ts.SyntaxKind.EnumDeclaration:
-            return isTypeImplicitlyExported(checker.getSymbolAtLocation(node.name)!, sourceFile, checker);
-        case ts.SyntaxKind.VariableDeclaration:
-            const s = checker.getSymbolAtLocation(node.name);
-            //may be used in `typeof x` (test)
-            return sourceFile.forEachChild(function cb(child): boolean | undefined {
-                return ts.isTypeQueryNode(child)
-                    ? checker.getSymbolAtLocation(child.exprName) === s
-                    : child.forEachChild(cb);
-            }) === true;
-        default:
-            return false;
-    }
-}
-
-
-function isTypeImplicitlyExported(typeSymbol: ts.Symbol, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
-    return sourceFile.forEachChild(function cb(child): boolean | undefined {
-        if (isImportLike(child)) {
-            return false;
-        }
-        const type = getImplicitType(child, checker);
-        // TODO: checker.typeEquals https://github.com/Microsoft/TypeScript/issues/13502
-        return type !== undefined && checker.typeToString(type) === checker.symbolToString(typeSymbol) || child.forEachChild(cb);
-    }) === true;
-}
-
-//mv
-/**
- * Ignore this import if it's used as an implicit type somewhere.
- * Workround for https://github.com/Microsoft/TypeScript/issues/9944
- */
-export function isImportUsed(importSpecifier: ts.Identifier, sourceFile: ts.SourceFile, checker: ts.TypeChecker): boolean {
-    const importedSymbol = checker.getSymbolAtLocation(importSpecifier);
-    if (importedSymbol === undefined) {
-        return false;
-    }
-
-    const symbol = checker.getAliasedSymbol(importedSymbol);
-    if (!isSymbolFlagSet(symbol, ts.SymbolFlags.Type)) {
-        return false;
-    }
-
-    return isTypeImplicitlyExported(symbol, sourceFile, checker);
-}
-
-function getImplicitType(node: ts.Node, checker: ts.TypeChecker): ts.Type | undefined {
-    if ((ts.isPropertyDeclaration(node) || ts.isVariableDeclaration(node)) &&
-        node.type === undefined && node.name.kind === ts.SyntaxKind.Identifier ||
-        ts.isBindingElement(node) && node.name.kind === ts.SyntaxKind.Identifier) {
-        return checker.getTypeAtLocation(node);
-    } else if (isSignatureDeclaration(node) && node.type === undefined) {
-        const sig = checker.getSignatureFromDeclaration(node);
-        return sig === undefined ? undefined : sig.getReturnType();
-    } else {
-        return undefined;
-    }
-}
-
-export type ImportLike = ts.ImportDeclaration | ts.ImportEqualsDeclaration;
-export function isImportLike(node: ts.Node): node is ImportLike {
-    return node.kind === ts.SyntaxKind.ImportDeclaration || node.kind === ts.SyntaxKind.ImportEqualsDeclaration;
 }

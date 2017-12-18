@@ -20,20 +20,22 @@ import {
     isTypeFlagSet,
     isExpression,
     isTypeReference,
-    isUnionType,
     isUnionOrIntersectionType,
+    hasModifier,
 } from "tsutils";
 import * as ts from "typescript";
 
-import { AccessFlags, accessFlags, SymbolInfo } from "./accessFlags";
-import { EnumAccessFlags, accessFlagsForEnumAccess } from "./enumAccessFlags";
-import { multiMapAdd, skipAlias, some, zip } from "./utils";
+import { EnumUse, getEnumUse } from "./enumUse";
+import { Use, getUse, SymbolUses } from "./use";
+import { multiMapAdd, skipAlias, zip, createIfNotSet } from "./utils";
 import {
     getPropertySymbolOfObjectBindingPatternWithoutPropertyName,
     getContainingObjectLiteralElement,
     getPropertySymbolsFromContextualType,
 } from './referencesUtils';
 import { isPublicAccess } from './privacy';
+import { isReadonlyType } from '../noUnusedAnythingRule';
+import { find } from '../../utils';
 
 const infoCache = new WeakMap<ts.Program, AnalysisResult>();
 export function getInfo(program: ts.Program): AnalysisResult {
@@ -48,128 +50,32 @@ export function getInfo(program: ts.Program): AnalysisResult {
 
 export class AnalysisResult {
     constructor(
-        private readonly symbolInfos: ReadonlyMap<ts.Symbol, SymbolInfo>,
-        private readonly enumMembers: ReadonlyMap<ts.Symbol, EnumAccessFlags>,
-        private readonly typeAssignmentsSourceToTarget: ReadonlyMap</*from*/ ts.Type, /*to*/ Iterable<ts.Type>>,
-        private readonly typeAssignmentsTargetToSource: ReadonlyMap</*to*/ ts.Type, /*from*/ Iterable<ts.Type>>,
-        private readonly castedToTypes: ReadonlySet<ts.Symbol>) {}
+        private readonly symbolUses: ReadonlyMap<ts.Symbol, SymbolUses>,
+        private readonly enumMembers: ReadonlyMap<ts.Symbol, EnumUse>) {}
 
-    public getSymbolInfo(symbol: ts.Symbol): SymbolInfo {
-        return this.symbolInfos.get(symbol)!;
+    public getSymbolUses(symbol: ts.Symbol): SymbolUses {
+        return this.symbolUses.get(symbol)!;
     }
 
-    public getEnumAccessFlags(enumMember: ts.Symbol): EnumAccessFlags {
+    public getEnumAccessFlags(enumMember: ts.Symbol): EnumUse {
         const flags = this.enumMembers.get(enumMember);
-        return flags === undefined ? EnumAccessFlags.None : flags;
+        return flags === undefined ? EnumUse.None : flags;
     }
-
-    //test
-    public isPropertyUsedForAssignment(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-        if (!isSymbolFlagSet(symbol, ts.SymbolFlags.Property)) {
-            return false; //todo: what about methods
-        }
-        const targets = this.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
-        return targets !== undefined && some(targets, target => checker.getPropertyOfType(target, symbol.name) !== undefined);
-    }
-
-    public isPropertyAssignedToMutableCollection(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-        const targets = this.typeAssignmentsSourceToTarget.get(getTypeContainingProperty(symbol, checker));
-        //TODO: use a set of target types, because there will be duplicates...
-        return targets !== undefined && some(targets, target => {
-            const targetProperty = checker.getPropertyOfType(target, symbol.name);
-            if (targetProperty === undefined) {
-                return false;
-            }
-            const t = getTypeOfProperty(targetProperty, checker); //name
-            return t !== undefined && !allowsReadonlyCollectionType(t);
-        });
-    }
-
-    public symbolIsIndirectlyAssignedProperty(symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-        //why do these two get the containing type differently? Would be nice to calculate only once...
-        return isSymbolFlagSet(symbol, ts.SymbolFlags.Property) &&
-            (this.isParentCastedTo(symbol) || this.isPropertyAssignedIndirectly(symbol, checker));
-    }
-
-    private isParentCastedTo(symbol: ts.Symbol): boolean {
-        return this.castedToTypes.has(getParentOfPropertySymbol(symbol));
-    }
-
-    private isPropertyAssignedIndirectly(propertySymbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-        const sources = this.typeAssignmentsTargetToSource.get(getTypeContainingProperty(propertySymbol, checker))
-        return sources !== undefined && some(sources, source =>
-            isTypeFlagSet(source, ts.TypeFlags.Any) || checker.getPropertyOfType(source, propertySymbol.name) !== undefined);
-    }
-}
-
-//why doesn't checker.getDeclaredTypeOfSymbol work?
-//this needs to work on methods too...
-function getTypeOfProperty(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Type | undefined {
-    if (symbol.declarations === undefined) {
-        return undefined; //neater
-    }
-    for (const d of symbol.declarations) { //name
-        if ((ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) && d.type !== undefined) {
-            return checker.getTypeFromTypeNode(d.type);
-        }
-    }
-    return undefined;
-}
-
-function allowsReadonlyCollectionType(type: ts.Type): boolean {
-    return isTypeFlagSet(type, ts.TypeFlags.Any)
-        || (isUnionType(type)
-            ? type.types.some(allowsReadonlyCollectionType)
-            : type.symbol !== undefined && type.symbol.name.startsWith("Readonly"));
-}
-
-//mv
-function getParentOfPropertySymbol(symbol: ts.Symbol): ts.Symbol {
-    return (symbol as any).parent;
-}
-
-//todo; better
-function getTypeContainingProperty(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Type {
-    const parentSymbol = (symbol as any).parent as ts.Symbol;
-    return checker.getTypeAtLocation(parentSymbol.declarations![0]);
-
-    /*for (const d of symbol.declarations!) {
-        if (ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) {
-            const parent = d.parent as ts.ClassDeclaration | ts.ClassExpression | ts.InterfaceDeclaration | ts.TypeLiteralNode;
-            switch (parent.kind) {
-                case ts.SyntaxKind.ClassDeclaration:
-                case ts.SyntaxKind.ClassExpression:
-                case ts.SyntaxKind.InterfaceDeclaration:
-                case ts.SyntaxKind.TypeLiteral:
-                    break;
-                default:
-                    throw new Error(); //!
-            }
-            checker.getSymbolAtLocation(ts.isTypeLiteralNode(parent) ? parent : parent.name);
-            checker.getTypeAtLocation(parent.name!);
-        }
-    }*/
 }
 
 class Analyzer {
-    private readonly symbolInfos = new Map<ts.Symbol, SymbolInfo>(); //name
-    private readonly enumMembers = new Map<ts.Symbol, EnumAccessFlags>();
+    private readonly symbolUses = new Map<ts.Symbol, SymbolUses>();
+    private readonly enumMembers = new Map<ts.Symbol, EnumUse>();
     private readonly localVariableAliases = new Map<ts.Symbol, Set<ts.Symbol>>();
-    private readonly typeAssignmentsSourceToTarget = new Map</*from*/ ts.Type, /*to*/ Set<ts.Type>>();
-    private readonly typeAssignmentsTargetToSource = new Map</*to*/ ts.Type, /*from*/ Set<ts.Type>>();
-    private readonly castedToTypes = new Set<ts.Symbol>();
-    private readonly seenTypes = new Set<ts.Type>(); //needed?
+    private readonly typeAssignments = new Map</*source*/ ts.Type, /*taret*/ Set<ts.Type>>();
+    private readonly seenTypeCasts = new Set<ts.Type>();
 
     constructor(private readonly checker: ts.TypeChecker) {}
 
     public finish(): AnalysisResult {
         this.propagateAliases();
-        return new AnalysisResult(
-            this.symbolInfos,
-            this.enumMembers,
-            this.typeAssignmentsSourceToTarget,
-            this.typeAssignmentsTargetToSource,
-            this.castedToTypes);
+        this.propagateAssignments();
+        return new AnalysisResult(this.symbolUses, this.enumMembers);
     }
 
     public analyze(node: ts.Node, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined) {
@@ -221,21 +127,62 @@ class Analyzer {
         while (hadChanges) {
             hadChanges = false;
             this.localVariableAliases.forEach((aliases, sym) => {
-                const originalInfo = this.symbolInfos.get(sym)!;
+                const originalInfo = this.symbolUses.get(sym)!;
                 if (originalInfo.everUsedAsMutableCollection) {
                     return; // Nothing to propagate
                 }
                 for (const alias of aliases) {
                     //todo: might be a private alias...
-                    const aliasInfo = this.symbolInfos.get(alias)!;
+                    const aliasInfo = this.symbolUses.get(alias)!;
                     if (aliasInfo.everUsedAsMutableCollection) {//todo: public/private difference
-                        originalInfo.private |= AccessFlags.ReadWithMutableType;
-                        originalInfo.public |= AccessFlags.ReadWithMutableType;
+                        originalInfo.private |= Use.ReadWithMutableType;
+                        originalInfo.public |= Use.ReadWithMutableType;
                         hadChanges = true;
                     }
                 }
             });
         }
+    }
+
+    private propagateAssignments(): void {
+        for (const [source, targets] of this.typeAssignments) {
+            for (const target of targets) {
+                this.propagateAssignment(source, target);
+            }
+        }
+    }
+
+    private propagateAssignment(source: ts.Type, target: ts.Type): void {
+        if (isTypeFlagSet(source, ts.TypeFlags.Any)) {
+            // Assigning to a target from "any" counts as a creation of all of `target`'s properties.
+            for (const targetProperty of this.checker.getPropertiesOfType(target)) {
+                this.getSymbolUses(targetProperty).public |= Use.CreateAlias;
+            }
+            return;
+        }
+
+        for (let sourceProperty of this.checker.getPropertiesOfType(source)) {
+            sourceProperty = skipTransient(sourceProperty);
+            const targetProperty = this.checker.getPropertyOfType(target, sourceProperty.name);
+            if (targetProperty === undefined) {
+                // Source property not actually used.
+                continue;
+            }
+
+            const targetPropertyType = getTypeOfProperty(targetProperty, this.checker);
+            // This counts as a read of the source property, and a creation of the target property.
+
+            this.getSymbolUses(sourceProperty).public |=
+                // If we assign this to a mutable collection type, then it needs to be mutable too.
+                (targetPropertyType === undefined || isReadonlyType(targetPropertyType) ? Use.ReadReadonly : Use.ReadWithMutableType)
+                // If we assign this to a mutable property, then it needs to be mutable too.
+                | (isReadonlyProperty(targetProperty) ? Use.None : Use.Write);
+            this.getSymbolUses(targetProperty).public |= Use.CreateAlias;
+        }
+    }
+
+    private getSymbolUses(symbol: ts.Symbol): SymbolUses {
+        return createIfNotSet(this.symbolUses, symbol, () => new SymbolUses());
     }
 
     private trackUse(node: ts.Identifier, currentFile: ts.SourceFile, currentClass: ts.ClassLikeDeclaration | undefined): void {
@@ -246,7 +193,7 @@ class Analyzer {
 
         const symbol = skipTransient(skipAlias(sym, this.checker));
         if (isSymbolFlagSet(symbol, ts.SymbolFlags.EnumMember)) {
-            this.enumMembers.set(symbol, accessFlagsForEnumAccess(node) | this.enumMembers.get(symbol)!);
+            this.enumMembers.set(symbol, getEnumUse(node) | this.enumMembers.get(symbol)!);
             return;
         }
 
@@ -286,8 +233,8 @@ class Analyzer {
                 return;
             }
 
-            const info = createIfNotSet(this.symbolInfos, symbol, () => new SymbolInfo());
-            const access = accessFlags(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
+            const access = getUse(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
+            const info = this.getSymbolUses(symbol);
             if (isPublicAccess(node, symbol, currentFile, currentClass)) {
                 info.public |= access;
             } else {
@@ -300,12 +247,12 @@ class Analyzer {
         multiMapAdd(this.localVariableAliases, symbol, this.checker.getSymbolAtLocation(aliasId)!);
     }
 
-    private addTypeAssignment(to: ts.Type, from: ts.Type): void {//maybe inline
+    private addTypeAssignment(to: ts.Type, from: ts.Type): void {
         if (to === from) {
             return;
         }
 
-        //If 'to' is a union, we need to assign to parts.
+        // If 'to' is a union, assign from 'from' to each member of the union.
         if (isUnionOrIntersectionType(to)) {
             for (const t of to.types) { //name
                 this.addTypeAssignment(t, from);
@@ -313,8 +260,7 @@ class Analyzer {
             return;
         }
 
-        //also, if assigning A[] to B[], we are also assigning A to B.
-        //but I don't know how to do that...
+        // Assigning A[] to B[] means assigning A to B.
         if (isTypeReference(to) && isTypeReference(from)) {
             if (to.typeArguments !== undefined
                 && from.typeArguments !== undefined
@@ -325,9 +271,7 @@ class Analyzer {
             }
         }
 
-        //should have a *set* of assignments, not an array (for perf)
-        multiMapAdd(this.typeAssignmentsSourceToTarget, from, to);
-        multiMapAdd(this.typeAssignmentsTargetToSource, to, from);
+        multiMapAdd(this.typeAssignments, from, to);
     }
 
     private addCastToTypeNode(node: ts.TypeNode): void {
@@ -335,10 +279,10 @@ class Analyzer {
     }
 
     private addCastToType(type: ts.Type): void {
-        if (this.seenTypes.has(type)) {
+        if (this.seenTypeCasts.has(type)) {
             return;
         }
-        this.seenTypes.add(type);
+        this.seenTypeCasts.add(type);
 
         if (isUnionOrIntersectionType(type)) {
             //test -- for `type T = { a } & { b }` we treat both `a` and `b` as implicitly-created if there is a cast to `T`
@@ -351,14 +295,13 @@ class Analyzer {
                 this.addCastToType(t);
             }
         } else {
-            if (type.symbol === undefined) {
-                return;
-            }
-            this.castedToTypes.add(type.symbol);
-            //test: also casts to all of its property types
-            for (const prop of this.checker.getPropertiesOfType(type)) {
-                //this.addCastToType(this.checker.getDeclaredTypeOfSymbol(prop)) ought to work,
-                //but getDeclaredTypeOFSymbol returns 'any' for `readonly a: { readonly b: number}`
+            for (let prop of this.checker.getPropertiesOfType(type)) {
+                prop = skipTransient(prop);
+                // Casting to a type counts as a creation of each property.
+                this.getSymbolUses(prop).public |= Use.CreateAlias;
+
+                // TODO: `this.checker.getDeclaredTypeOfSymbol(prop)` ought to work...
+                // but it returns 'any' for `readonly a: { readonly b: number }`.
                 if (prop.declarations !== undefined) {
                     for (const d of prop.declarations!) {
                         if ((ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) && d.type !== undefined) {
@@ -371,23 +314,25 @@ class Analyzer {
     }
 }
 
-function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: (key: K) => V): V {
-    const already = map.get(key); //name
-    if (already !== undefined) {
-        return already;
-    } else {
-        const value = createValue(key);
-        map.set(key, value);
-        return value;
-    }
-}
-
 function skipTransient(symbol: ts.Symbol): ts.Symbol {
-    //todo: we shouldn't get these coming out of `getSymbolAtLocation`...
+    // TODO: Maybe TypeScript shouldn't be returning transient symbols from the public API?
     if (isSymbolFlagSet(symbol, ts.SymbolFlags.Transient)) {
         const target = (symbol as any).target;
         return target === undefined ? symbol : target;
     } else {
         return symbol;
     }
+}
+
+function getTypeOfProperty(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Type | undefined {
+    return symbol.declarations === undefined ? undefined : find(symbol.declarations, d =>
+        (ts.isPropertyDeclaration(d) || ts.isPropertySignature(d)) && d.type !== undefined
+            ? checker.getTypeFromTypeNode(d.type)
+            : undefined);
+}
+
+function isReadonlyProperty(propertySymbol: ts.Symbol): boolean {
+    // TODO: Would be nice if TypeScript's `isReadonlySymbol` were public...
+    return propertySymbol.declarations !== undefined
+        && propertySymbol.declarations.some(d => hasModifier(d.modifiers, ts.SyntaxKind.ReadonlyKeyword));
 }

@@ -19,15 +19,6 @@ import assert = require("assert");
 import * as ts from "typescript";
 import { isSymbolFlagSet } from 'tsutils';
 
-export function some<T>(iter: Iterable<T>, pred: (value: T) => boolean): boolean {
-    for (const value of iter) {
-        if (pred(value)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 export function zip<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>, cb: (a: T, b: T) => void): void {
     assert(a.length === b.length);
     for (let i = 0; i < a.length; i++) {
@@ -76,6 +67,17 @@ export function skipAlias(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol
 
 export function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
     return isSymbolFlagSet(symbol, ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : undefined;
+}
+
+export function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: (key: K) => V): V {
+    const value = map.get(key);
+    if (value !== undefined) {
+        return value;
+    } else {
+        const value = createValue(key);
+        map.set(key, value);
+        return value;
+    }
 }
 
 export function multiMapAdd<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {

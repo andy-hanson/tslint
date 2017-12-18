@@ -19,7 +19,7 @@ import * as utils from "tsutils";
 import * as ts from "typescript";
 
 import * as Lint from "../index";
-import { isImportLike, ImportLike, isImportUsed } from './noUnusedAnythingRule';
+import { isImportLike, ImportLike, isImportUsed } from "./analysis/importUtils";
 
 const OPTION_CHECK_PARAMETERS = "check-parameters";
 const OPTION_IGNORE_PATTERN = "ignore-pattern";
