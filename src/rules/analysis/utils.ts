@@ -50,6 +50,7 @@ export function isUsageTrackedDeclaration(node: ts.Node): node is UsageTrackedDe
         case ts.SyntaxKind.InterfaceDeclaration:
         case ts.SyntaxKind.EnumDeclaration:
         case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.TypeParameter:
             return true;
         case ts.SyntaxKind.FunctionDeclaration:
             return (node as ts.FunctionDeclaration).name !== undefined;
@@ -58,15 +59,6 @@ export function isUsageTrackedDeclaration(node: ts.Node): node is UsageTrackedDe
         default:
             return false;
     }
-}
-
-export function skipAlias(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol {
-    const alias = tryGetAliasedSymbol(symbol, checker);
-    return alias === undefined ? symbol : alias;
-}
-
-export function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
-    return isSymbolFlagSet(symbol, ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : undefined;
 }
 
 export function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, V>, key: K, createValue: (key: K) => V): V {
@@ -91,4 +83,17 @@ export function multiMapAdd<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
 
 export function assertNever(value: never): never {
     throw new Error(value);
+}
+
+export function skipAlias(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol {
+    const alias = tryGetAliasedSymbol(symbol, checker);
+    return alias === undefined ? symbol : alias;
+}
+
+export function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker): ts.Symbol | undefined {
+    return isSymbolFlagSet(symbol, ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : undefined;
+}
+
+export function isFunctionLikeSymbol(symbol: ts.Symbol): boolean {
+    return isSymbolFlagSet(symbol, ts.SymbolFlags.Function | ts.SymbolFlags.Method);
 }

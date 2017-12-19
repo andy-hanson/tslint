@@ -1,9 +1,4 @@
-class C {
-    constructor(public x: number) {}
-                       ~ [readonly]
-}
-interface I {
-    readonly x: number;
-}
-const i: I = new C(0);
-use(i.x);
+// Does complain at top-level
+const readonlyArray = [0];
+      ~~~~~~~~~~~~~ [readonlyarray]
+use(readonlyArray);

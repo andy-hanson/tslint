@@ -31,10 +31,9 @@ import * as Lint from "..";
 import { AnalysisResult, getInfo } from "./analysis";
 import { getDeprecationFromDeclaration } from "./analysis/deprecationUtils";
 import { hasEnumUse, EnumUse } from "./analysis/enumUse";
-import { getPrivacyScope } from "./analysis/privacy";
+import { getPrivacyScope, variableStatementFromDeclaration } from "./analysis/privacy";
 import { SymbolUses, isNameOfMutableCollectionType } from "./analysis/use";
-import { isUsageTrackedDeclaration, UsageTrackedDeclaration } from "./analysis/utils";
-import { isNodeFlagSet } from 'tsutils';
+import { isUsageTrackedDeclaration, UsageTrackedDeclaration, isFunctionLikeSymbol, assertNever } from "./analysis/utils";
 import { find } from '../utils';
 import { isImplicitlyExported } from './analysis/importUtils';
 
@@ -108,9 +107,7 @@ class Walker extends Lint.AbstractWalker<Options> {
     public walk(node: ts.Node): void {
         switch (node.kind) {
             case ts.SyntaxKind.Parameter:
-                if (ts.isIdentifier((node as ts.ParameterDeclaration).name)) {
-                    this.checkParameter(node as NamedParameter);
-                }
+                this.checkParameter(node as ts.ParameterDeclaration);
                 break;
             case ts.SyntaxKind.EnumMember:
                 this.checkEnumMember(node as ts.EnumMember);
@@ -123,20 +120,19 @@ class Walker extends Lint.AbstractWalker<Options> {
         node.forEachChild(child => this.walk(child));
     }
 
-    private checkParameter(node: NamedParameter): void { //name
+    private checkParameter(node: ts.ParameterDeclaration): void {
+        if (!ts.isIdentifier(node.name) || isParameterOfBodilessFunction(node)) {
+            return;
+        }
+        const nodeAsNamed = node as ts.ParameterDeclaration & { readonly name: ts.Identifier };
         if (ts.isParameterPropertyDeclaration(node)) {
             // Don't care if the parameter side is unused, since it's used to create the property.
             // So, only check the property side.
-            const prop = getPropertyOfParameterProperty(node, this.checker);
-            if (prop !== undefined) {
-                this.checkSymbol(node, prop);
-            }
-        }
-        // If there's no body we can't check whether the parameter is used.
-        else if (!!(node.parent! as any).body
-            && ts.isIdentifier(node.name)
-            && node.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { // Todo: handle 'this'
-            this.checkSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
+            const prop = this.checker.getSymbolsOfParameterPropertyDeclaration(node, node.name.text).find(s =>
+                isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
+            this.checkSymbol(nodeAsNamed, prop);
+        } else if (node.name.originalKeywordKind !== ts.SyntaxKind.ThisKeyword) { // TODO: handle 'this'
+            this.checkSymbol(nodeAsNamed, this.checker.getSymbolAtLocation(node.name)!);
         }
     }
 
@@ -151,13 +147,13 @@ class Walker extends Lint.AbstractWalker<Options> {
     }
 
     private checkSymbol(node: UsageTrackedDeclaration, symbol: ts.Symbol): void {
-        if (isOkToNotUse(node, symbol, this.checker, this.options.ignoreNames)) {
+        if (isOkToNotUse(node, this.checker, this.options.ignoreNames)) {
             return;
         }
 
-        const info = this.analysis.getSymbolUses(symbol);
-        this.checkSymbolUses(node, symbol, info);
-        if (!info.everUsedAsMutableCollection) {
+        const uses = this.analysis.getSymbolUses(symbol);
+        this.checkSymbolUses(node, symbol, uses);
+        if (!uses.everUsedAsMutableCollection) {
             this.warnOnNonMutatedCollection(node);
         }
     }
@@ -179,25 +175,21 @@ class Walker extends Lint.AbstractWalker<Options> {
                 }
             }
         } else if (!uses.everRead) {
-            //might be a fn used for a side effect.
-            if (uses.everUsedForSideEffect && isFunctionLike(symbol)) {
+            if (uses.everUsedForSideEffect && isFunctionLikeSymbol(symbol)) {
                 const sig = this.checker.getSignatureFromDeclaration(symbol.valueDeclaration as ts.SignatureDeclaration)!;
                 if (!isTypeFlagSet(this.checker.getReturnTypeOfSignature(sig), ts.TypeFlags.Void)) {
                     fail("This function is used for its side effect, but the return value is never used.");
                 }
+            } else if (uses.mutatesCollection) {
+                if (!uses.everAssignedANonFreshValue) {
+                    fail("This collection is created and filled with values, but never read from.");
+                }
             } else {
-                if (uses.mutatesCollection) {
-                    if (!uses.everAssignedANonFreshValue) {
-                        fail("This collection is created and filled with values, but never read from.");
-                    }
-                }
-                else {
-                    fail("This symbol is given a value, but analysis found no reads. This is likely dead code.");
-                }
+                fail("This symbol is given a value, but analysis found no reads. This is likely dead code.");
             }
-        } else if (!uses.everWritten && isMutable(node)) {
+        } else if (!uses.everWritten && isMutableAndCouldBeImmutable(node)) {
             fail(ts.isVariableDeclaration(node)
-                ? "Analysis found no mutable uses of this variable; use `const`." //tests
+                ? "Analysis found no mutable uses of this variable; use `const`."
                 : "Analysis found no writes to this property; mark it as `readonly`.");
         } else if (!uses.everCreatedOrWritten) {
             fail("Analysis found places where this is read, but found no places where it is given a value.");
@@ -214,7 +206,7 @@ class Walker extends Lint.AbstractWalker<Options> {
         const typeNode = getTypeAnnotationNode(node);
         const info = typeNode === undefined
             ? shouldTypeReadonlyCollectionWithInferredType(node)
-                ? getMutableCollectionTypeFromType(this.checker.getTypeAtLocation(node.name))
+                ? getMutableCollectionTypeName(this.checker.getTypeAtLocation(node.name))
                 : undefined
             : getMutableCollectionTypeFromNode(typeNode);
         if (info !== undefined) {
@@ -227,52 +219,26 @@ class Walker extends Lint.AbstractWalker<Options> {
 
 // For class property or export, warn if the implicit type is ReadonlyArray.
 // But for a local variable, don't demand a type annotation everywhere an array isn't mutated, because that's annoying.
-function shouldTypeReadonlyCollectionWithInferredType(node: UsageTrackedDeclaration): boolean {//test
-    if (ts.isPropertyDeclaration(node)) {
-        return true;
-    }
-    if (ts.isVariableDeclaration(node)) {
-        //helper for this...
-        const p = node.parent!;
-        if (ts.isVariableDeclarationList(p)) {
-            const pp = p.parent!;
-            if (ts.isVariableStatement(pp)) {
-                return ts.isSourceFile(pp.parent!);
-            }
-        }
-    }
-    return false;
+function shouldTypeReadonlyCollectionWithInferredType(node: UsageTrackedDeclaration): boolean {
+    const varStatement = variableStatementFromDeclaration(node);
+    return varStatement !== undefined && ts.isSourceFile(varStatement.parent!) || ts.isPropertyDeclaration(node);
 }
 
-//returns the type name
-function getMutableCollectionTypeFromType(type: ts.Type): string | undefined {
-    if (isUnionOrIntersectionType(type)) { //isUnionType helper
-        return find(type.types, getMutableCollectionTypeFromType);
-    }
-    if (isTypeReference(type)) {
-        const { symbol } = type.target;
-        if (symbol !== undefined && isNameOfMutableCollectionType(symbol.name)) {
-            return symbol.name;
-        }
-    }
-    return undefined;
+function getMutableCollectionTypeName(type: ts.Type): string | undefined {
+    return isUnionOrIntersectionType(type)
+        ? find(type.types, getMutableCollectionTypeName)
+        : isTypeReference(type)
+            && type.symbol !== undefined
+            && isNameOfMutableCollectionType(type.symbol.name)
+        ? type.symbol.name
+        : undefined;
 }
-//mostly dup of above, break out a utility?
+
 export function isReadonlyType(type: ts.Type): boolean {
-    //Allow 'any'
-    //todo: use && and || and whatnot
-    if (isTypeFlagSet(type, ts.TypeFlags.Any)) {
-        return true;
-    }
-    if (isUnionOrIntersectionType(type)) {
-        return type.types.some(isReadonlyType);
-    }
-    if (isTypeReference(type)) {
-        //todo: try just `type.symbol !== undefined && type.symbol.name.startsWith("Readonly")
-        const { symbol } = type.target;
-        return symbol !== undefined && symbol.name.startsWith("Readonly");
-    }
-    return false;
+    return isTypeFlagSet(type, ts.TypeFlags.Any)
+        || (isUnionOrIntersectionType(type)
+            ? type.types.some(isReadonlyType)
+            : isTypeReference(type) && type.symbol !== undefined && type.symbol.name.startsWith("Readonly"));
 }
 
 
@@ -280,7 +246,6 @@ function getMutableCollectionTypeFromNode(
     typeNode: ts.TypeNode,
 ): { readonly typeNode: ts.TypeNode, readonly typeName: string } | undefined {
     return ts.isUnionTypeNode(typeNode)
-        //Report errors if `string | string[]` is used immutably (should be `string | ReadonlyArray<string>`) (test)
         ? find(typeNode.types, getMutableCollectionTypeFromNode)
         : ts.isArrayTypeNode(typeNode)
         ? { typeNode, typeName: "Array" }
@@ -294,8 +259,6 @@ function getMutableCollectionTypeFromNode(
 function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | undefined {
     switch (node.kind) {
         case ts.SyntaxKind.Parameter:
-        //Can't recommend `...args: ReadonlyArray<x>` since that's not allowed by TS
-            //return (node as ts.ParameterDeclaration).dotDotDotToken === undefined ? (node as ts.ParameterDeclaration).type : undefined;
         case ts.SyntaxKind.VariableDeclaration:
         case ts.SyntaxKind.PropertyDeclaration:
         case ts.SyntaxKind.MethodDeclaration:
@@ -306,54 +269,39 @@ function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | und
         case ts.SyntaxKind.GetAccessor:
         case ts.SyntaxKind.SetAccessor:
             type T =
-                | ts.ParameterDeclaration | ts.VariableDeclaration | ts.PropertyDeclaration
+            | ts.ParameterDeclaration | ts.VariableDeclaration | ts.PropertyDeclaration
                 | ts.MethodDeclaration | ts.MethodSignature | ts.FunctionDeclaration
                 | ts.PropertyDeclaration | ts.PropertySignature | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration;
             return (node as T).type;
-        case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.EnumDeclaration:
         case ts.SyntaxKind.InterfaceDeclaration:
         case ts.SyntaxKind.ModuleDeclaration:
+        case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.TypeParameter:
             return undefined;
         default:
             throw new Error(`TODO: Handle ${ts.SyntaxKind[node.kind]}`);
     }
 }
 
-
-//reuse
-function isFunctionLike(symbol: ts.Symbol): boolean {
-    return isSymbolFlagSet(symbol, ts.SymbolFlags.Function | ts.SymbolFlags.Method);
-}
-
-//note: returns false for things that can't be made immutable (parameters, catch clause variables, methods)
-function isMutable(node: UsageTrackedDeclaration): boolean {
-    if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node) || ts.isParameterPropertyDeclaration(node)) {
-        return !hasModifier(node.modifiers, ts.SyntaxKind.ReadonlyKeyword);
-    } else if (ts.isVariableDeclaration(node)) {
-        const parent = node.parent!;
-        return parent.kind !== ts.SyntaxKind.CatchClause && getVariableDeclarationKind(parent) !== VariableDeclarationKind.Const;
-    } else {
-        return false;
-    }
+// Note: returns false for parameters since those can't be made const.
+function isMutableAndCouldBeImmutable(node: UsageTrackedDeclaration): boolean {
+    return ts.isPropertyDeclaration(node) || ts.isPropertySignature(node) || ts.isParameterPropertyDeclaration(node)
+        ? !hasModifier(node.modifiers, ts.SyntaxKind.ReadonlyKeyword)
+        : ts.isVariableDeclaration(node)
+            && node.parent!.kind !== ts.SyntaxKind.CatchClause
+            && getVariableDeclarationKind(node.parent as ts.VariableDeclarationList) !== VariableDeclarationKind.Const;
 }
 
 function isOkToNotUse(
     node: UsageTrackedDeclaration,
-    symbol: ts.Symbol,
     checker: ts.TypeChecker,
     ignoreNames: ReadonlySet<string>,
 ): boolean {
-    return isAmbient(node)
-        || isIgnored(node)
+    return isIgnored(node)
         || isDeprecated(node)
-        || isOverload(node, symbol, checker)
         || isOverride(node, checker)
         || ignoreNames.has(node.name.text);
-}
-
-function isAmbient(node: UsageTrackedDeclaration): boolean { //test
-    return isNodeFlagSet(node, (ts.NodeFlags as any).Ambient) //todo: make that flag public
 }
 
 function isIgnored(node: UsageTrackedDeclaration): boolean {
@@ -364,34 +312,37 @@ function isDeprecated(node: ts.Node): boolean {
     return !ts.isSourceFile(node) && (getDeprecationFromDeclaration(node) !== undefined || isDeprecated(node.parent!));
 }
 
-function isOverload(node: UsageTrackedDeclaration, symbol: ts.Symbol, checker: ts.TypeChecker): boolean {
-    if (!ts.isParameter(node)) {
-        return false;
-    }
-    if (symbol.declarations!.length !== 1) { //can I just delete this? (test first)
-        return true;
-    }
-
-    const name = ts.getNameOfDeclaration(node.parent!);
-    const signatureSymbol = name === undefined ? undefined : checker.getSymbolAtLocation(name);
-    return signatureSymbol !== undefined && signatureSymbol.declarations!.length !== 1;
-}
-
-
-function isOverride(node: UsageTrackedDeclaration, checker: ts.TypeChecker): boolean { //test
-    const name = node.name.text;
+function isParameterOfBodilessFunction(node: ts.ParameterDeclaration): boolean {
     const parent = node.parent!;
-    if (!ts.isClassLike(parent)) {
-        return false;
+    switch (parent.kind) {
+        case ts.SyntaxKind.CallSignature:
+        case ts.SyntaxKind.ConstructSignature:
+        case ts.SyntaxKind.MethodSignature:
+        case ts.SyntaxKind.IndexSignature:
+        case ts.SyntaxKind.FunctionType:
+        case ts.SyntaxKind.ConstructorType:
+        case ts.SyntaxKind.JSDocFunctionType:
+            return true;
+        case ts.SyntaxKind.ArrowFunction:
+        case ts.SyntaxKind.FunctionExpression:
+            return false;
+        case ts.SyntaxKind.FunctionDeclaration:
+        case ts.SyntaxKind.MethodDeclaration:
+        case ts.SyntaxKind.Constructor:
+        case ts.SyntaxKind.GetAccessor:
+        case ts.SyntaxKind.SetAccessor:
+            return parent.body === undefined;
+        default:
+            throw assertNever(parent);
     }
-    return parent.heritageClauses !== undefined && parent.heritageClauses.some(clause =>
-        clause.types.some(typeNode =>
-            checker.getPropertyOfType(checker.getTypeFromTypeNode(typeNode), name) !== undefined));
 }
 
-type NamedParameter =  ts.ParameterDeclaration & { readonly name: ts.Identifier };
-
-function getPropertyOfParameterProperty(p: NamedParameter, checker: ts.TypeChecker): ts.Symbol {
-    return checker.getSymbolsOfParameterPropertyDeclaration(p, p.name.text).find(s =>
-            isSymbolFlagSet(s, ts.SymbolFlags.Property))!;
+// Don't warn about an unused override, because it may be used through the base type.
+function isOverride(node: UsageTrackedDeclaration, checker: ts.TypeChecker): boolean {
+    const parent = node.parent!;
+    return ts.isClassLike(parent)
+        && parent.heritageClauses !== undefined
+        && parent.heritageClauses.some(clause =>
+            clause.types.some(typeNode =>
+                checker.getPropertyOfType(checker.getTypeFromTypeNode(typeNode), node.name.text) !== undefined));
 }

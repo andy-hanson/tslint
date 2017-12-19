@@ -45,7 +45,8 @@ export function isPublicAccess(
 }
 
 export function getPrivacyScope(declaration: ts.Declaration): ts.SourceFile | ts.ClassLikeDeclaration | undefined {
-    const decl = skipToVariableStatement(declaration);
+    const varStatement = variableStatementFromDeclaration(declaration);
+    const decl = varStatement === undefined ? declaration : varStatement;
     const parent = decl.parent!;
     return isExported(decl) ? tryCast(parent, ts.isSourceFile)
         : ts.isClassElement(decl) ? tryCast(parent, ts.isClassLike)
@@ -53,10 +54,9 @@ export function getPrivacyScope(declaration: ts.Declaration): ts.SourceFile | ts
         : undefined;
 }
 
-function skipToVariableStatement(decl: ts.Declaration): ts.Declaration | ts.VariableStatement {
-    const parent = decl.parent!;
-    return ts.isVariableDeclaration(decl) && ts.isVariableDeclarationList(parent) && ts.isVariableStatement(parent.parent!)
-        ? parent.parent as ts.VariableStatement : decl;
+export function variableStatementFromDeclaration(decl: ts.Declaration): ts.VariableStatement | undefined {
+    return ts.isVariableDeclaration(decl) && ts.isVariableDeclarationList(decl.parent!) && ts.isVariableStatement(decl.parent!.parent!)
+        ? decl.parent!.parent as ts.VariableStatement : undefined;
 }
 
 /** A type is publicly used if it appears in the signature of an exported function/method, or is part of an exported type alias. */

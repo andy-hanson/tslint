@@ -73,8 +73,8 @@ class Analyzer {
     constructor(private readonly checker: ts.TypeChecker) {}
 
     public finish(): AnalysisResult {
-        this.propagateAliases();
-        this.propagateAssignments();
+        this.addUsesFromAliases();
+        this.addUsesFromAssignments();
         return new AnalysisResult(this.symbolUses, this.enumMembers);
     }
 
@@ -107,14 +107,12 @@ class Analyzer {
             case ts.SyntaxKind.AsExpression:
             case ts.SyntaxKind.TypePredicate:
                 this.addCastToTypeNode((node as ts.AsExpression | ts.TypeAssertion | ts.TypePredicateNode).type);
-
         }
 
-        //at any location, if there's a contextual type, it's a type assignment.
         if (isExpression(node)) {
             const ctx = this.checker.getContextualType(node);
             if (ctx !== undefined) {
-                //don't need the help from accessFlags then?
+                // The type of this expression is being assigned to the contextual type.
                 this.addTypeAssignment(ctx, this.checker.getTypeAtLocation(node));
             }
         }
@@ -122,7 +120,8 @@ class Analyzer {
         node.forEachChild(child => this.analyze(child, currentFile, currentClass));
     }
 
-    private propagateAliases(): void {
+    /** When we assign `x = y`, if `x` is a mutable collection then `y` must be too. */
+    private addUsesFromAliases(): void {
         let hadChanges = true;
         while (hadChanges) {
             hadChanges = false;
@@ -132,9 +131,9 @@ class Analyzer {
                     return; // Nothing to propagate
                 }
                 for (const alias of aliases) {
-                    //todo: might be a private alias...
                     const aliasInfo = this.symbolUses.get(alias)!;
-                    if (aliasInfo.everUsedAsMutableCollection) {//todo: public/private difference
+                    // TODO: We might choose to warn on a collection which is mutated privately but publicly is only read.
+                    if (aliasInfo.everUsedAsMutableCollection) {
                         originalInfo.private |= Use.ReadWithMutableType;
                         originalInfo.public |= Use.ReadWithMutableType;
                         hadChanges = true;
@@ -144,15 +143,16 @@ class Analyzer {
         }
     }
 
-    private propagateAssignments(): void {
+    /** When we assign to a type T from a type U, the properties in U are read and the corresponding properties in T are written. */
+    private addUsesFromAssignments(): void {
         for (const [source, targets] of this.typeAssignments) {
             for (const target of targets) {
-                this.propagateAssignment(source, target);
+                this.addUsesFromAssignment(source, target);
             }
         }
     }
 
-    private propagateAssignment(source: ts.Type, target: ts.Type): void {
+    private addUsesFromAssignment(source: ts.Type, target: ts.Type): void {
         if (isTypeFlagSet(source, ts.TypeFlags.Any)) {
             // Assigning to a target from "any" counts as a creation of all of `target`'s properties.
             for (const targetProperty of this.checker.getPropertiesOfType(target)) {
@@ -254,8 +254,14 @@ class Analyzer {
 
         // If 'to' is a union, assign from 'from' to each member of the union.
         if (isUnionOrIntersectionType(to)) {
-            for (const t of to.types) { //name
-                this.addTypeAssignment(t, from);
+            for (const type of to.types) {
+                this.addTypeAssignment(type, from);
+            }
+            return;
+        }
+        if (isUnionOrIntersectionType(from)) {
+            for (const type of from.types) {
+                this.addTypeAssignment(to, type);
             }
             return;
         }

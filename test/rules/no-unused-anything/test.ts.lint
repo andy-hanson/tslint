@@ -1,6 +1,14 @@
 declare const any: any;
 declare function use(...args: any[]): void;
 
+{
+    // Catches unused locals, type parameters, etc.
+    function f<T>(x) {}
+             ~ [noread]
+               ~ [noread]
+                  ~ [noread]
+}
+
 // Special handling of enum members
 {
     {
@@ -34,6 +42,15 @@ declare function use(...args: any[]): void;
         }
         use(Flags.B, Flags.All);
     }
+}
+
+{
+    class C {
+        m(): void;
+        m(n: number): void; // Doesn't complain about unused parameter in an overload.
+        m(_?: number) {}
+    }
+    new C().m();
 }
 
 // Catches never-used symbol of any kind
@@ -142,6 +159,14 @@ declare function use(...args: any[]): void;
         const i: I = new C([]);
         i.x.push("");
         use(i.x);
+    }
+
+    // Works on intersections
+    {
+        interface I { readonly name: number };
+        const x = any as I & { readonly name: string };
+        const y: I & { readonly name: string } = x;
+        use(y.name);
     }
 }
 // Conversely: tests for indirect use of properties

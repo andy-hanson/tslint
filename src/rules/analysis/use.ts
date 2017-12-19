@@ -17,9 +17,9 @@
 
 import assert = require("assert");
 import * as ts from "typescript";
-import { isAssignmentKind, isSymbolFlagSet, isTypeFlagSet } from "tsutils";
+import { isAssignmentKind, isSymbolFlagSet, isTypeFlagSet, isNodeFlagSet } from "tsutils";
 import { isReadonlyType } from "../noUnusedAnythingRule";
-import { assertNever } from "./utils";
+import { assertNever, isFunctionLikeSymbol } from "./utils";
 
 //todo: dual mutable / readonly types
 export class SymbolUses {
@@ -143,7 +143,7 @@ class UseChecker {
                 const { expression } = parent as ts.CallExpression;
                 return node !== expression
                     ? this.fromContext(node)
-                    : symbol !== undefined && isSymbolFlagSet(symbol, ts.SymbolFlags.Method | ts.SymbolFlags.Function)
+                    : symbol !== undefined && isFunctionLikeSymbol(symbol)
                         // For a callable, we analyze the return type to see if it's used mutably.
                         ? this.work(parent as ts.CallExpression, symbol, shouldAddAlias)
                         : Use.ReadReadonly;
@@ -170,7 +170,10 @@ class UseChecker {
             case ts.SyntaxKind.VariableDeclaration: {
                 const { initializer, name, parent: gp } = parent as ts.VariableDeclaration; //name
                 if (node === name) {
-                    return ts.isVariableStatement(gp!.parent!) ? createFlag(initializer) : Use.CreateAlias;
+                    const varStatement = gp!.parent!;
+                    return ts.isVariableStatement(varStatement)
+                        ? isAmbient(varStatement) ? Use.CreateAlias : createFlag(initializer)
+                        : Use.CreateAlias;
                 } else {
                     assert(node === initializer);
                     const addedAlias = ts.isIdentifier(name) && shouldAddAlias;
@@ -412,4 +415,9 @@ function getCollectionMutateKind(name: string): CollectionMutateKind {
         default:
             return CollectionMutateKind.None;
     }
+}
+
+//mv
+function isAmbient(node: ts.Node): boolean {
+    return isNodeFlagSet(node, (ts.NodeFlags as any).Ambient); //todo
 }
