@@ -1,12 +1,26 @@
 declare const any: any;
 declare function use(...args: any[]): void;
 
+// Catches unused locals, type parameters, etc.
 {
-    // Catches unused locals, type parameters, etc.
     function f<T>(x) {}
              ~ [noread]
                ~ [noread]
                   ~ [noread]
+    type T = number;
+         ~ [noread]
+    interface I<T> {
+              ~ [noread]
+                ~ [noread]
+        p: number;
+        ~ [unused]
+        m(): void;
+        ~ [noread]
+    }
+    enum E {}
+         ~ [noread]
+    namespace N {}
+              ~ [noread]
 }
 
 // Special handling of enum members
@@ -32,8 +46,8 @@ declare function use(...args: any[]): void;
         use(f(E.A));
     }
 
+    // Internal uses of an enum member don't count.
     {
-        // Internal uses of an enum member don't count.
         enum Flags {
             A = 1 << 0,
             ~ [unused]
@@ -53,19 +67,10 @@ declare function use(...args: any[]): void;
     new C().m();
 }
 
-// Catches never-used symbol of any kind
-{
-    type T = number;
-         ~ [noread]
-}
-
+// Detects functions used only for side-effects that return values.
 {
     function f() { return 0; }
              ~ [sideeffectonly]
-    f();
-}
-{
-    function f() {}
     f();
 }
 
@@ -76,6 +81,7 @@ declare function use(...args: any[]): void;
     use(x);
 }
 
+// Detects never-created properties.
 {
     class C {
         readonly p!: number;
@@ -169,7 +175,8 @@ declare function use(...args: any[]): void;
         use(y.name);
     }
 }
-// Conversely: tests for indirect use of properties
+
+// Conversely: Tests for indirect use of properties
 {
     // Assigning to a readonly property is a readonly use
     {
@@ -305,7 +312,7 @@ const readonlyArray = [0];
       ~~~~~~~~~~~~~ [readonlyarray]
 use(readonlyArray);
 
-//// Detects collections that are written to but not read from.
+// Detects collections that are written to but not read from.
 {
     // "push" and "unshift" just return the length, so this isn't really using the collection (could just use a counter).
     {
@@ -417,6 +424,59 @@ use(readonlyArray);
 // Anything starting with `_` is ignored
 {
     const _x = 0;
+}
+
+// Tests with destructuring -- be sure to have both `const { x } = y` and `({ x } = y)` versions as the code for each differs.
+{
+    {
+        interface I { readonly x: number; }
+                               ~ [nocreate]
+        function _(i: I) {
+            const { x } = i;
+                    ~ [noread]
+        }
+    }
+
+    {
+        interface I { readonly x: number; }
+                               ~ [nocreate]
+        function _(i: I) {
+            let x: number;
+                ~ [noread]
+            ({ x } = i);
+        }
+    }
+
+    {
+        interface I { readonly x: number; }
+                               ~ [nocreate]
+        function _(i: I) {
+            const { x: y } = i;
+                       ~ [noread]
+        }
+    }
+
+    {
+        interface I { readonly x: number; }
+                               ~ [nocreate]
+        function _(i: I) {
+            let y: number;
+                ~ [noread]
+            ({ x: y } = i);
+                  ~ noread]
+        }
+    }
+
+    {
+        interface I { readonly x: { readonly y: number; }[]; }
+                               ~ [nocreate]
+                                             ~ [nocreate]
+        function _(i: I) {
+            let z: number;
+                ~ [noread]
+            ({ x: [{ y: z }] } = i);
+        }
+    }
 }
 
 [enummembernevercreated]: Enum member is compared against, but analysis found no cases of something being given this value.

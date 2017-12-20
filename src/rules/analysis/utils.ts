@@ -40,9 +40,11 @@ export function isUsageTrackedDeclaration(node: ts.Node): node is UsageTrackedDe
         case ts.SyntaxKind.GetAccessor:
         case ts.SyntaxKind.SetAccessor:
         case ts.SyntaxKind.ModuleDeclaration:
+        case ts.SyntaxKind.BindingElement:
             type T =
                 | ts.PropertyDeclaration | ts.PropertySignature | ts.MethodSignature
-                | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ModuleDeclaration;
+                | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration | ts.ModuleDeclaration
+                | ts.BindingElement;
             return ts.isIdentifier((node as T).name);
         case ts.SyntaxKind.MethodDeclaration:
             const parent = node.parent!;

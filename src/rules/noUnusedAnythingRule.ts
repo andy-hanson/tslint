@@ -278,6 +278,7 @@ function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | und
         case ts.SyntaxKind.ModuleDeclaration:
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.TypeParameter:
+        case ts.SyntaxKind.BindingElement:
             return undefined;
         default:
             throw new Error(`TODO: Handle ${ts.SyntaxKind[node.kind]}`);

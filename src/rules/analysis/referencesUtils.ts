@@ -20,6 +20,7 @@ import { isSymbolFlagSet, isUnionType } from "tsutils";
 import * as ts from "typescript";
 
 import { tryCast } from "./utils";
+import { arrayify, mapDefined } from '../../utils';
 
 // TODO: These utilities are from findAllReferences.ts in the TypeScript repo -- they could be made public.
 
@@ -53,6 +54,7 @@ export function getPropertySymbolOfObjectBindingPatternWithoutPropertyName(
     return propSymbol;
 }
 
+//this only ever returns `node.parent` or `undefined`...
 export function getContainingObjectLiteralElement(node: ts.Node): ts.ObjectLiteralElement | undefined {
     const parent = node.parent!;
     switch (node.kind) {
@@ -86,44 +88,11 @@ function isObjectLiteralElement(node: ts.Node): node is ts.ObjectLiteralElement 
     }
 }
 
-/** Gets all symbols for one property. Does not get symbols for every property. */
-export function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement, checker: ts.TypeChecker): ReadonlyArray<ts.Symbol> {
-    const objectLiteral = node.parent as ts.ObjectLiteralExpression;
-    const name = getNameFromObjectLiteralElement(node);
-    if (name === undefined) {
-        return [];
-    }
-
-    const contextualType = checker.getContextualType(objectLiteral);
-    if (contextualType === undefined) {
-        return [];
-    }
-
-    const result: ts.Symbol[] = [];
-    const symbol = contextualType.getProperty(name);
-    if (symbol !== undefined) {
-        result.push(symbol);
-    }
-
-    if (isUnionType(contextualType)) {
-        for (const t of contextualType.types) {
-            const symbol = t.getProperty(name);
-            if (symbol !== undefined) {
-                result.push(symbol);
-            }
-        }
-    }
-    return result;
-}
-
-function getNameFromObjectLiteralElement(node: ts.ObjectLiteralElement): string | undefined {
-    const name = node.name!;
-    return name.kind !== ts.SyntaxKind.ComputedPropertyName
-        ? name.text
-        // treat computed property names where expression is string/numeric literal as just string/numeric literal
-        : isStringOrNumericLiteral(name.expression) ? name.expression.text : undefined;
-}
-
-function isStringOrNumericLiteral(node: ts.Node): node is ts.StringLiteral | ts.NumericLiteral {
-    return node.kind === ts.SyntaxKind.StringLiteral || node.kind === ts.SyntaxKind.NumericLiteral;
+/** An object literal expression writes to the properties in its contextual type. */
+export function getPropertySymbolsFromContextualType(node: ts.ObjectLiteralElement & { readonly name: ts.Identifier }, checker: ts.TypeChecker): ReadonlyArray<ts.Symbol> {
+    const contextualType = checker.getContextualType(node.parent as ts.ObjectLiteralExpression);
+    const propertyName = node.name.text;
+    return contextualType === undefined ? []
+        : isUnionType(contextualType) ? mapDefined(contextualType.types, t => t.getProperty(propertyName))
+        : arrayify(contextualType.getProperty(propertyName));
 }

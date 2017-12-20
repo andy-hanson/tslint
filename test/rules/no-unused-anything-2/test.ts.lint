@@ -1,4 +1,0 @@
-// Does complain at top-level
-const readonlyArray = [0];
-      ~~~~~~~~~~~~~ [readonlyarray]
-use(readonlyArray);

@@ -26,7 +26,7 @@ import {
 import * as ts from "typescript";
 
 import { EnumUse, getEnumUse } from "./enumUse";
-import { Use, getUse, SymbolUses } from "./use";
+import { Use, getUse, SymbolUses, isOnLeftHandSideOfDestructuring } from "./use";
 import { multiMapAdd, skipAlias, zip, createIfNotSet } from "./utils";
 import {
     getPropertySymbolOfObjectBindingPatternWithoutPropertyName,
@@ -93,9 +93,12 @@ class Analyzer {
             case ts.SyntaxKind.BinaryExpression: {
                 const { left, operatorToken, right } = node as ts.BinaryExpression;
                 if (operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-                    this.addTypeAssignment(
-                        this.checker.getTypeAtLocation(left),
-                        this.checker.getTypeAtLocation(right));
+                    //But not for destructuring
+                    if (!ts.isObjectLiteralExpression(left) && !ts.isArrayLiteralExpression(left)) {
+                        this.addTypeAssignment(
+                            this.checker.getTypeAtLocation(left),
+                            this.checker.getTypeAtLocation(right));
+                    }
                 }
                 break;
             }
@@ -110,10 +113,19 @@ class Analyzer {
         }
 
         if (isExpression(node)) {
-            const ctx = this.checker.getContextualType(node);
-            if (ctx !== undefined) {
-                // The type of this expression is being assigned to the contextual type.
-                this.addTypeAssignment(ctx, this.checker.getTypeAtLocation(node));
+            //TypeScript will make a bogus contextual type of `{ x: any }` in this case:
+            //const { x: y } = obj;
+            //The contextual type should have `{ readonly x }`. But just ignore it anyway.
+            const parent = node.parent!;
+            //We already handle `addTypeAssignment` at VariableDeclaration and BinaryExpression above.
+            //Be sure not to get a contextual type from a destructuring --
+            //for `const { x } = o;` it will have a contextual type of `{ x: any }`, which is bad since `x` is mutable.
+            if (!ts.isVariableDeclaration(parent) && !ts.isBinaryExpression(parent)) {
+                const ctx = this.checker.getContextualType(node);
+                if (ctx !== undefined) {
+                    // The type of this expression is being assigned to the contextual type.
+                    this.addTypeAssignment(ctx, this.checker.getTypeAtLocation(node));
+                }
             }
         }
 
@@ -172,11 +184,13 @@ class Analyzer {
             const targetPropertyType = getTypeOfProperty(targetProperty, this.checker);
             // This counts as a read of the source property, and a creation of the target property.
 
-            this.getSymbolUses(sourceProperty).public |=
+            //inline
+            const flag =
                 // If we assign this to a mutable collection type, then it needs to be mutable too.
                 (targetPropertyType === undefined || isReadonlyType(targetPropertyType) ? Use.ReadReadonly : Use.ReadWithMutableType)
                 // If we assign this to a mutable property, then it needs to be mutable too.
                 | (isReadonlyProperty(targetProperty) ? Use.None : Use.Write);
+            this.getSymbolUses(sourceProperty).public |= flag;
             this.getSymbolUses(targetProperty).public |= Use.CreateAlias;
         }
     }
@@ -203,17 +217,30 @@ class Analyzer {
             //and also track the local variable below.
         }
         else {
-            const objectLiteral = getContainingObjectLiteralElement(node); //needs testing
-            if (objectLiteral !== undefined) {
-                for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(objectLiteral, this.checker)) {
-                    this.trackUseOfSymbol(node, assignedPropertySymbol, currentFile, currentClass);
-                }
-                //we're doing this both for the property and for the value referenced by shorthand
-                //test: function f(x) { return { x }; }
-                const parent = node.parent!;
-                if (ts.isShorthandPropertyAssignment(parent)) {
-                    const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
-                    this.trackUseOfSymbol(node, v, currentFile, currentClass);
+            const parent = node.parent!;
+            const objectLiteralElement = getContainingObjectLiteralElement(node); //needs testing
+            if (objectLiteralElement !== undefined) {
+                if (isOnLeftHandSideOfDestructuring(objectLiteralElement.parent as ts.ObjectLiteralExpression)) {
+                    const propertySymbol = this.checker.getPropertySymbolOfDestructuringAssignment(node);
+                    if (propertySymbol !== undefined) {
+                        this.trackUseOfSymbol(node, propertySymbol, currentFile, currentClass);
+                    }
+
+                    if (ts.isShorthandPropertyAssignment(parent)) {
+                        // Also track use of the local variable
+                        //todo: instead of calling into `getUse`, just handle this right here since we got the node kind already...
+                        this.trackUseOfSymbol(node, this.checker.getShorthandAssignmentValueSymbol(parent)!, currentFile, currentClass);
+                    }
+                } else {
+                    for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(objectLiteralElement as ts.ObjectLiteralElement & { name: ts.Identifier }, this.checker)) { //just use optional...
+                        this.trackUseOfSymbol(node, assignedPropertySymbol, currentFile, currentClass);
+                    }
+                    //we're doing this both for the property and for the value referenced by shorthand
+                    //test: function f(x) { return { x }; }
+                    if (ts.isShorthandPropertyAssignment(parent)) {
+                        const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
+                        this.trackUseOfSymbol(node, v, currentFile, currentClass);
+                    }
                 }
                 return;
             }

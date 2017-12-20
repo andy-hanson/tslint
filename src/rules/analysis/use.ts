@@ -142,7 +142,7 @@ class UseChecker {
             case ts.SyntaxKind.CallExpression: {
                 const { expression } = parent as ts.CallExpression;
                 return node !== expression
-                    ? this.fromContext(node)
+                    ? this.readFromContext(node)
                     : symbol !== undefined && isFunctionLikeSymbol(symbol)
                         // For a callable, we analyze the return type to see if it's used mutably.
                         ? this.work(parent as ts.CallExpression, symbol, shouldAddAlias)
@@ -150,7 +150,7 @@ class UseChecker {
             }
             case ts.SyntaxKind.NewExpression:
                 return node !== (parent as ts.NewExpression).expression
-                    ? this.fromContext(node)
+                    ? this.readFromContext(node)
                     : Use.ReadReadonly;
 
             case ts.SyntaxKind.FunctionExpression:
@@ -182,7 +182,7 @@ class UseChecker {
                     }
                     // There may be no contextual type, in which case we consider this an immutable use for now.
                     // But we will track uses of the alias and handle that at the end.
-                    return this.fromContext(node, addedAlias);
+                    return this.readFromContext(node, addedAlias);
                 }
             }
 
@@ -197,7 +197,7 @@ class UseChecker {
                         // `... = x` means we are assigning this to something else,
                         // and need the contextual type to know if it's used as a readonly collection.
                         // When assigning to an existing variable there should always be a contextual type, so no need to track an alias.
-                        : this.fromContext(node);
+                        : this.readFromContext(node);
                 } else {
                     return node === left && isAssignmentKind(operatorToken.kind)
                         // `x += ...` is treated as a write, and also as a read if it appears in another expression as in `f(x += 1)`.
@@ -212,7 +212,7 @@ class UseChecker {
 
             case ts.SyntaxKind.PropertyDeclaration: {
                 const { name, initializer } = parent as ts.PropertyDeclaration;
-                return node === name ? createFlag(initializer) : this.fromContext(node);
+                return node === name ? createFlag(initializer) : this.readFromContext(node);
             }
 
             case ts.SyntaxKind.ExportSpecifier: {
@@ -288,28 +288,37 @@ class UseChecker {
             }
 
             case ts.SyntaxKind.ConditionalExpression:
-                return node === (parent as ts.ConditionalExpression).condition ? Use.ReadReadonly : this.fromContext(node);
+                return node === (parent as ts.ConditionalExpression).condition ? Use.ReadReadonly : this.readFromContext(node);
 
             case ts.SyntaxKind.Parameter:
-                return node === (parent as ts.ParameterDeclaration).name ? Use.CreateAlias : this.fromContext(node);
+                return node === (parent as ts.ParameterDeclaration).name ? Use.CreateAlias : this.readFromContext(node);
 
             case ts.SyntaxKind.ArrayLiteralExpression:
             case ts.SyntaxKind.ReturnStatement:
             case ts.SyntaxKind.ArrowFunction: // Return value only, parameters are in ParameterDeclarations
             case ts.SyntaxKind.ThrowStatement:
-                return this.fromContext(node);
+                return this.readFromContext(node);
 
             case ts.SyntaxKind.ShorthandPropertyAssignment:
-                //If this is the property symbol, this creates it. Otherwise this is reading a local variable.
-                return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.CreateAlias : this.fromContext(node);
+                return isOnLeftHandSideOfDestructuring((parent as ts.ShorthandPropertyAssignment).parent)
+                    // `({ x } = o);`: If this is the property symbol, reads it. If this is the local variable, writes to it.
+                    //todo: doesn't necessarily read with mutable type... depends on type of the variable...
+                    ? isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.ReadWithMutableType : Use.Write
+                    // If this is the property symbol, this creates it. Otherwise this is reading a local variable.
+                    : isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.CreateAlias : this.readFromContext(node);
 
             case ts.SyntaxKind.PropertyAssignment: {
                 const { name, initializer } = parent as ts.PropertyAssignment;
-                return name === node ? createFlag(initializer) : this.fromContext(initializer);
+                //preferconditional
+                if (isOnLeftHandSideOfDestructuring((parent as ts.ShorthandPropertyAssignment).parent)) {
+                    return node === name ? this.readFromContext(node) : Use.Write;
+                } else {
+                    return node === name ? createFlag(initializer) : this.readFromContext(node);
+                }
             }
 
             case ts.SyntaxKind.BindingElement:
-                //we might be reading it for a mutable type...
+                //todo: we might be reading it for a mutable type...
                 //todo: actually create an alias
                 //this aliases a property of the contextual type of the binding element
                 return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.ReadReadonly : Use.CreateAlias;
@@ -319,7 +328,7 @@ class UseChecker {
         }
     }
 
-    private fromContext(node: ts.Expression, addedAlias = false): Use {
+    private readFromContext(node: ts.Expression, addedAlias = false): Use {
         // In all other locations: if provided to a context with a readonly type, not a mutable use.
         // `function f(): ReadonlyArray<number> { return x; }` uses `x` readonly, `funciton f(): number[]` does not.
         const contextualType = this.checker.getContextualType(node); //uncast
@@ -337,6 +346,23 @@ class UseChecker {
     }
 }
 
+//!
+export function isOnLeftHandSideOfDestructuring(node: ts.ArrayLiteralExpression | ts.ObjectLiteralExpression): boolean {
+    const parent = node.parent!;
+    switch (parent.kind) {
+        case ts.SyntaxKind.PropertyAssignment:
+            return isOnLeftHandSideOfDestructuring((parent as ts.PropertyAssignment).parent);
+        case ts.SyntaxKind.ArrayLiteralExpression:
+        case ts.SyntaxKind.ObjectLiteralExpression:
+            return isOnLeftHandSideOfDestructuring(parent as ts.ArrayLiteralExpression | ts.ObjectLiteralExpression);
+        case ts.SyntaxKind.BinaryExpression: {
+            const { left, operatorToken } = parent as ts.BinaryExpression;
+            return node === left && operatorToken.kind === ts.SyntaxKind.EqualsToken;
+        }
+        default:
+            return false;
+    }
+}
 
 function createFlag(initializer: ts.Expression | undefined): Use {
     return initializer === undefined
