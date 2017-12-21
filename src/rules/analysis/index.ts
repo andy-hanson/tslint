@@ -22,20 +22,16 @@ import {
     isTypeReference,
     isUnionOrIntersectionType,
     hasModifier,
+    isUnionType,
 } from "tsutils";
 import * as ts from "typescript";
 
 import { EnumUse, getEnumUse } from "./enumUse";
 import { Use, getUse, SymbolUses, isOnLeftHandSideOfDestructuring } from "./use";
-import { multiMapAdd, skipAlias, zip, createIfNotSet } from "./utils";
-import {
-    getPropertySymbolOfObjectBindingPatternWithoutPropertyName,
-    getContainingObjectLiteralElement,
-    getPropertySymbolsFromContextualType,
-} from './referencesUtils';
+import { multiMapAdd, skipAlias, zip, createIfNotSet, assertNever } from "./utils";
 import { isPublicAccess } from './privacy';
 import { isReadonlyType } from '../noUnusedAnythingRule';
-import { find } from '../../utils';
+import { find, mapDefined, arrayify } from '../../utils';
 
 const infoCache = new WeakMap<ts.Program, AnalysisResult>();
 export function getInfo(program: ts.Program): AnalysisResult {
@@ -83,21 +79,27 @@ class Analyzer {
             case ts.SyntaxKind.Identifier:
                 this.trackUse(node as ts.Identifier, currentFile, currentClass);
                 break;
+
             case ts.SyntaxKind.VariableDeclaration: {
-                const { initializer, type } = node as ts.VariableDeclaration;
-                if (initializer !== undefined && type !== undefined) {
-                    this.addTypeAssignment(this.checker.getTypeFromTypeNode(type), this.checker.getTypeAtLocation(initializer));
+                const { name, type: typeNode, initializer } = node as ts.VariableDeclaration;
+                const initializerType = initializer === undefined ? undefined : this.checker.getTypeAtLocation(initializer);
+                const type = typeNode !== undefined ? this.checker.getTypeFromTypeNode(typeNode) : initializerType;
+                if (initializer !== undefined && typeNode !== undefined) {
+                    this.addTypeAssignment(type!, this.checker.getTypeAtLocation(initializer));
+                }
+                if (type !== undefined) {
+                    this.addAliasesFromDestructure(name, type);
                 }
                 break;
             }
             case ts.SyntaxKind.BinaryExpression: {
                 const { left, operatorToken, right } = node as ts.BinaryExpression;
                 if (operatorToken.kind === ts.SyntaxKind.EqualsToken) {
-                    //But not for destructuring
-                    if (!ts.isObjectLiteralExpression(left) && !ts.isArrayLiteralExpression(left)) {
-                        this.addTypeAssignment(
-                            this.checker.getTypeAtLocation(left),
-                            this.checker.getTypeAtLocation(right));
+                    // Destructuring use should not count as a type assignment.
+                    if (ts.isObjectLiteralExpression(left) || ts.isArrayLiteralExpression(left)) {
+                    this.addAliasesFromMutatingDestructure(left);
+                    } else {
+                        this.addTypeAssignment(this.checker.getTypeAtLocation(left), this.checker.getTypeAtLocation(right));
                     }
                 }
                 break;
@@ -113,13 +115,8 @@ class Analyzer {
         }
 
         if (isExpression(node)) {
-            //TypeScript will make a bogus contextual type of `{ x: any }` in this case:
-            //const { x: y } = obj;
-            //The contextual type should have `{ readonly x }`. But just ignore it anyway.
             const parent = node.parent!;
-            //We already handle `addTypeAssignment` at VariableDeclaration and BinaryExpression above.
-            //Be sure not to get a contextual type from a destructuring --
-            //for `const { x } = o;` it will have a contextual type of `{ x: any }`, which is bad since `x` is mutable.
+            // We already handle `addTypeAssignment` at VariableDeclaration and BinaryExpression above, so no need to do it here again.
             if (!ts.isVariableDeclaration(parent) && !ts.isBinaryExpression(parent)) {
                 const ctx = this.checker.getContextualType(node);
                 if (ctx !== undefined) {
@@ -132,66 +129,85 @@ class Analyzer {
         node.forEachChild(child => this.analyze(child, currentFile, currentClass));
     }
 
-    /** When we assign `x = y`, if `x` is a mutable collection then `y` must be too. */
-    private addUsesFromAliases(): void {
-        let hadChanges = true;
-        while (hadChanges) {
-            hadChanges = false;
-            this.localVariableAliases.forEach((aliases, sym) => {
-                const originalInfo = this.symbolUses.get(sym)!;
-                if (originalInfo.everUsedAsMutableCollection) {
-                    return; // Nothing to propagate
-                }
-                for (const alias of aliases) {
-                    const aliasInfo = this.symbolUses.get(alias)!;
-                    // TODO: We might choose to warn on a collection which is mutated privately but publicly is only read.
-                    if (aliasInfo.everUsedAsMutableCollection) {
-                        originalInfo.private |= Use.ReadWithMutableType;
-                        originalInfo.public |= Use.ReadWithMutableType;
-                        hadChanges = true;
+    private addAliasesFromDestructure(bind: ts.BindingName, type: ts.Type, property?: ts.Symbol) {
+        switch (bind.kind) {
+            case ts.SyntaxKind.Identifier: {
+                if (property !== undefined) {
+                    for (const root of this.checker.getRootSymbols(property)) {//test destructuring a union
+                        this.addAlias(bind, root);
                     }
                 }
-            });
+                break;
+            }
+
+            case ts.SyntaxKind.ArrayBindingPattern:
+                if (isTypeReference(type) && type.typeArguments !== undefined && type.typeArguments.length === 1) {
+                    const elementType = type.typeArguments[0];
+                    for (const element of bind.elements) {
+                        if (element.kind !== ts.SyntaxKind.OmittedExpression) {
+                            this.addAliasesFromDestructure(element.name, elementType);
+                        }
+                    }
+                }
+                break;
+
+            case ts.SyntaxKind.ObjectBindingPattern:
+                for (const { propertyName, name } of bind.elements) {
+                    const propName = propertyName === undefined
+                        ? ts.isIdentifier(name) ? name.text : undefined
+                        : ts.isIdentifier(propertyName) ? propertyName.text : undefined;
+                    const prop = propName === undefined ? undefined : this.checker.getPropertyOfType(type, propName);
+                    const propType = prop === undefined ? undefined : getTypeOfProperty(prop, this.checker);
+                    if (propType !== undefined) {
+                        this.addAliasesFromDestructure(name, propType, prop);
+                    }
+                }
+                break;
+
+            default:
+                assertNever(bind);
         }
     }
 
-    /** When we assign to a type T from a type U, the properties in U are read and the corresponding properties in T are written. */
-    private addUsesFromAssignments(): void {
-        for (const [source, targets] of this.typeAssignments) {
-            for (const target of targets) {
-                this.addUsesFromAssignment(source, target);
+    private addAliasesFromMutatingDestructure(node: ts.Expression) {
+        if (ts.isObjectLiteralExpression(node)) {
+            for (const prop of node.properties) {
+                switch (prop.kind) {
+                    case ts.SyntaxKind.MethodDeclaration:
+                    case ts.SyntaxKind.GetAccessor:
+                    case ts.SyntaxKind.SetAccessor:
+                        break; // These are errors anyway
+                    case ts.SyntaxKind.SpreadAssignment:
+                        // TODO
+                        break;
+                    case ts.SyntaxKind.PropertyAssignment: {
+                        const { name, initializer } = prop as ts.PropertyAssignment;
+                        if (ts.isIdentifier(name) && ts.isIdentifier(initializer)) {
+                            const sym = this.checker.getPropertySymbolOfDestructuringAssignment(name);
+                            if (sym !== undefined) {
+                                this.addAlias(initializer, sym);
+                            }
+                        } else {
+                            this.addAliasesFromMutatingDestructure(initializer);
+                        }
+                        break;
+                    }
+                    case ts.SyntaxKind.ShorthandPropertyAssignment: {
+                        const localSymbol = this.checker.getShorthandAssignmentValueSymbol(prop);
+                        const propertySymbol = this.checker.getPropertySymbolOfDestructuringAssignment(prop.name)!;
+                        if (localSymbol !== undefined && propertySymbol !== undefined) {
+                            this.addAliasSymbol(propertySymbol, localSymbol);
+                        }
+                        break;
+                    }
+                    default:
+                        assertNever(prop);
+                }
             }
-        }
-    }
-
-    private addUsesFromAssignment(source: ts.Type, target: ts.Type): void {
-        if (isTypeFlagSet(source, ts.TypeFlags.Any)) {
-            // Assigning to a target from "any" counts as a creation of all of `target`'s properties.
-            for (const targetProperty of this.checker.getPropertiesOfType(target)) {
-                this.getSymbolUses(targetProperty).public |= Use.CreateAlias;
+        } else if (ts.isArrayLiteralExpression(node)) {
+            for (const e of node.elements) {
+                this.addAliasesFromMutatingDestructure(e);
             }
-            return;
-        }
-
-        for (let sourceProperty of this.checker.getPropertiesOfType(source)) {
-            sourceProperty = skipTransient(sourceProperty);
-            const targetProperty = this.checker.getPropertyOfType(target, sourceProperty.name);
-            if (targetProperty === undefined) {
-                // Source property not actually used.
-                continue;
-            }
-
-            const targetPropertyType = getTypeOfProperty(targetProperty, this.checker);
-            // This counts as a read of the source property, and a creation of the target property.
-
-            //inline
-            const flag =
-                // If we assign this to a mutable collection type, then it needs to be mutable too.
-                (targetPropertyType === undefined || isReadonlyType(targetPropertyType) ? Use.ReadReadonly : Use.ReadWithMutableType)
-                // If we assign this to a mutable property, then it needs to be mutable too.
-                | (isReadonlyProperty(targetProperty) ? Use.None : Use.Write);
-            this.getSymbolUses(sourceProperty).public |= flag;
-            this.getSymbolUses(targetProperty).public |= Use.CreateAlias;
         }
     }
 
@@ -211,36 +227,35 @@ class Analyzer {
             return;
         }
 
-        const destructedPropertySymbol = getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker);
+        const parent = node.parent!;
+        const destructedPropertySymbol = ts.isBindingElement(parent)
+            ? getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker)
+            : undefined;
         if (destructedPropertySymbol !== undefined) {
-            this.trackUseOfSymbol(node, destructedPropertySymbol, currentFile, currentClass); //needs testing
-            //and also track the local variable below.
+            // TODO: TypeScript probably shouldn't be giving us transient symbols here
+            if (!isSymbolFlagSet(destructedPropertySymbol, ts.SymbolFlags.Transient)) {
+                this.addAlias(node, destructedPropertySymbol);
+            }
+            this.trackUseOfSymbol(node, destructedPropertySymbol, currentFile, currentClass);
         }
         else {
-            const parent = node.parent!;
-            const objectLiteralElement = getContainingObjectLiteralElement(node); //needs testing
-            if (objectLiteralElement !== undefined) {
-                if (isOnLeftHandSideOfDestructuring(objectLiteralElement.parent as ts.ObjectLiteralExpression)) {
+            const grandParent = parent.parent!;
+            if (ts.isObjectLiteralElementLike(parent)
+                && parent.name === node
+                && (ts.isObjectLiteralExpression(grandParent) || ts.isJsxAttributes(grandParent))) {
+                if (ts.isObjectLiteralExpression(grandParent) && isOnLeftHandSideOfDestructuring(grandParent)) {
                     const propertySymbol = this.checker.getPropertySymbolOfDestructuringAssignment(node);
                     if (propertySymbol !== undefined) {
                         this.trackUseOfSymbol(node, propertySymbol, currentFile, currentClass);
                     }
-
-                    if (ts.isShorthandPropertyAssignment(parent)) {
-                        // Also track use of the local variable
-                        //todo: instead of calling into `getUse`, just handle this right here since we got the node kind already...
-                        this.trackUseOfSymbol(node, this.checker.getShorthandAssignmentValueSymbol(parent)!, currentFile, currentClass);
-                    }
                 } else {
-                    for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(objectLiteralElement as ts.ObjectLiteralElement & { name: ts.Identifier }, this.checker)) { //just use optional...
+                    for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(node, parent, this.checker)) {
                         this.trackUseOfSymbol(node, assignedPropertySymbol, currentFile, currentClass);
                     }
-                    //we're doing this both for the property and for the value referenced by shorthand
-                    //test: function f(x) { return { x }; }
-                    if (ts.isShorthandPropertyAssignment(parent)) {
-                        const v = this.checker.getShorthandAssignmentValueSymbol(parent)!;
-                        this.trackUseOfSymbol(node, v, currentFile, currentClass);
-                    }
+                }
+                // If this is shorthand, also count a use of the local symbol.
+                if (ts.isShorthandPropertyAssignment(parent)) {
+                    this.trackUseOfSymbol(node, this.checker.getShorthandAssignmentValueSymbol(parent)!, currentFile, currentClass);
                 }
                 return;
             }
@@ -255,7 +270,7 @@ class Analyzer {
         currentFile: ts.SourceFile,
         currentClass: ts.ClassLikeDeclaration | undefined,
     ) {
-        for (const symbol of this.checker.getRootSymbols(sym)) { //needs testing
+        for (const symbol of this.checker.getRootSymbols(sym)) {
             if (symbol.declarations === undefined) {
                 return;
             }
@@ -270,8 +285,14 @@ class Analyzer {
         }
     }
 
-    private addAlias(aliasId: ts.Identifier, symbol: ts.Symbol): void {
-        multiMapAdd(this.localVariableAliases, symbol, this.checker.getSymbolAtLocation(aliasId)!);
+    //swap params
+    private addAlias(aliasId: ts.Identifier, propertySymbol: ts.Symbol): void {
+        this.addAliasSymbol(propertySymbol, this.checker.getSymbolAtLocation(aliasId)!);
+    }
+
+    //!
+    private addAliasSymbol(propertySymbol: ts.Symbol, aliasSymbol: ts.Symbol): void {
+        multiMapAdd(this.localVariableAliases, propertySymbol, aliasSymbol);
     }
 
     private addTypeAssignment(to: ts.Type, from: ts.Type): void {
@@ -318,14 +339,13 @@ class Analyzer {
         this.seenTypeCasts.add(type);
 
         if (isUnionOrIntersectionType(type)) {
-            //test -- for `type T = { a } & { b }` we treat both `a` and `b` as implicitly-created if there is a cast to `T`
             for (const t of type.types) {
                 this.addCastToType(t);
             }
         } else if (isTypeReference(type) && type.typeArguments !== undefined) {
             this.addCastToType(type.target);
-            for (const t of type.typeArguments) { //name
-                this.addCastToType(t);
+            for (const typeArg of type.typeArguments) {
+                this.addCastToType(typeArg);
             }
         } else {
             for (let prop of this.checker.getPropertiesOfType(type)) {
@@ -343,6 +363,66 @@ class Analyzer {
                     }
                 }
             }
+        }
+    }
+
+    /** When we assign `x = y`, if `x` is a mutable collection then `y` must be too. */
+    private addUsesFromAliases(): void {
+        let hadChanges = true;
+        while (hadChanges) {
+            hadChanges = false;
+            this.localVariableAliases.forEach((aliases, symbol) => {
+                const originalInfo = this.symbolUses.get(symbol)!;
+                if (originalInfo.everUsedAsMutableCollection) {
+                    return; // Nothing to propagate
+                }
+                for (const alias of aliases) {
+                    const aliasInfo = this.symbolUses.get(alias)!;
+                    // TODO: We might choose to warn on a collection which is mutated privately but publicly is only read.
+                    if (aliasInfo.everUsedAsMutableCollection) {
+                        originalInfo.private |= Use.ReadWithMutableType;
+                        originalInfo.public |= Use.ReadWithMutableType;
+                        hadChanges = true;
+                    }
+                }
+            });
+        }
+    }
+
+    /** When we assign to a type T from a type U, the properties in U are read and the corresponding properties in T are written. */
+    private addUsesFromAssignments(): void {
+        for (const [source, targets] of this.typeAssignments) {
+            for (const target of targets) {
+                this.addUsesFromAssignment(source, target);
+            }
+        }
+    }
+
+    private addUsesFromAssignment(source: ts.Type, target: ts.Type): void {
+        if (isTypeFlagSet(source, ts.TypeFlags.Any)) {
+            // Assigning to a target from "any" counts as a creation of all of `target`'s properties.
+            for (const targetProperty of this.checker.getPropertiesOfType(target)) {
+                this.getSymbolUses(targetProperty).public |= Use.CreateAlias;
+            }
+            return;
+        }
+
+        for (let sourceProperty of this.checker.getPropertiesOfType(source)) {
+            sourceProperty = skipTransient(sourceProperty);
+            const targetProperty = this.checker.getPropertyOfType(target, sourceProperty.name);
+            if (targetProperty === undefined) {
+                // Source property not actually used.
+                continue;
+            }
+
+            const targetPropertyType = getTypeOfProperty(targetProperty, this.checker);
+            // This counts as a read of the source property, and a creation of the target property.
+            this.getSymbolUses(sourceProperty).public |=
+                // If we assign this to a mutable collection type, then it needs to be mutable too.
+                (targetPropertyType === undefined || isReadonlyType(targetPropertyType) ? Use.ReadReadonly : Use.ReadWithMutableType)
+                // If we assign this to a mutable property, then it needs to be mutable too.
+                | (isReadonlyProperty(targetProperty) ? Use.None : Use.Write);
+            this.getSymbolUses(targetProperty).public |= Use.CreateAlias;
         }
     }
 }
@@ -368,4 +448,45 @@ function isReadonlyProperty(propertySymbol: ts.Symbol): boolean {
     // TODO: Would be nice if TypeScript's `isReadonlySymbol` were public...
     return propertySymbol.declarations !== undefined
         && propertySymbol.declarations.some(d => hasModifier(d.modifiers, ts.SyntaxKind.ReadonlyKeyword));
+}
+
+function getObjectBindingElementWithoutPropertyName(symbol: ts.Symbol): ts.BindingElement | undefined {
+    const bindingElement = symbol.declarations === undefined ? undefined : symbol.declarations.find(ts.isBindingElement);
+    return bindingElement !== undefined
+        && bindingElement.parent!.kind === ts.SyntaxKind.ObjectBindingPattern
+        && bindingElement.propertyName === undefined
+        ? bindingElement
+        : undefined;
+}
+
+function getPropertySymbolOfObjectBindingPatternWithoutPropertyName(
+    symbol: ts.Symbol,
+    checker: ts.TypeChecker,
+): ts.Symbol | undefined {
+    const bindingElement = getObjectBindingElementWithoutPropertyName(symbol);
+    if (bindingElement === undefined) {
+        return undefined;
+    }
+
+    const typeOfPattern = checker.getTypeAtLocation(bindingElement.parent!);
+    const propSymbol = typeOfPattern === undefined
+        ? undefined
+        : checker.getPropertyOfType(typeOfPattern, (<ts.Identifier>bindingElement.name).text);
+    return propSymbol !== undefined && isSymbolFlagSet(propSymbol, ts.SymbolFlags.Accessor)
+        // See https://github.com/Microsoft/TypeScript/issues/16922
+        ? skipTransient(propSymbol)
+        : propSymbol;
+}
+
+/** An object literal expression writes to the properties in its contextual type. */
+function getPropertySymbolsFromContextualType(
+    name: ts.Identifier,
+    parent: ts.ObjectLiteralElement,
+    checker: ts.TypeChecker,
+): ReadonlyArray<ts.Symbol> {
+    const contextualType = checker.getContextualType(parent.parent as ts.ObjectLiteralExpression);
+    const propertyName = name.text;
+    return contextualType === undefined ? []
+        : isUnionType(contextualType) ? mapDefined(contextualType.types, t => t.getProperty(propertyName))
+        : arrayify(contextualType.getProperty(propertyName));
 }

@@ -3,7 +3,7 @@ declare function use(...args: any[]): void;
 
 // Catches unused locals, type parameters, etc.
 {
-    function f<T>(x) {}
+    function f<T>(x: number) {}
              ~ [noread]
                ~ [noread]
                   ~ [noread]
@@ -19,8 +19,18 @@ declare function use(...args: any[]): void;
     }
     enum E {}
          ~ [noread]
-    namespace N {}
-              ~ [noread]
+}
+// Namespaces must go at top-level
+namespace N {}
+          ~ [noread]
+
+// We use getRootSymbols to track all symbols we're using
+{
+    type T = { readonly x: number } | { readonly x: string };
+    function f(p: T) {
+        return p.x;
+    }
+    use(f({ x: 0 }));
 }
 
 // Special handling of enum members
@@ -103,7 +113,6 @@ declare function use(...args: any[]): void;
     // Fills in properties of properties too.
     use((any as { readonly x: { readonly y: { readonly z: number } } }).x.y.z);
 
-
     // Assigning a type to itself doesn't count.
     {
         interface I { x: number; }
@@ -129,6 +138,7 @@ declare function use(...args: any[]): void;
         }
     }
 
+    // Assigning writes to only matching properties
     {
         function f(p: { readonly x?: number, readonly y?: number }) {
                                                       ~ [nocreate]
@@ -167,6 +177,14 @@ declare function use(...args: any[]): void;
         use(i.x);
     }
 
+    // Works on unions
+    {
+        interface I { readonly name: number };
+        const x = any as I | { readonly name: string };
+        const y: I | { readonly name: string } = x;
+        use(y.name);
+    }
+
     // Works on intersections
     {
         interface I { readonly name: number };
@@ -190,6 +208,7 @@ declare function use(...args: any[]): void;
         const i: I = new C(0);
         use(i.x);
     }
+
     // Assigning to a mutable property is a mutable use
     {
         class C {
@@ -201,6 +220,7 @@ declare function use(...args: any[]): void;
         const i: I = new C(0);
         use(i.x++);
     }
+    // Negative of above test
     {
         class C {
             constructor(readonly x: number[]) {}
@@ -212,6 +232,7 @@ declare function use(...args: any[]): void;
         const i: I = new C([]);
         use(i.x);
     }
+
     // No error if the type it's assigned to isn't a readonly collection
     {
         class C {
@@ -426,6 +447,13 @@ use(readonlyArray);
     const _x = 0;
 }
 
+// Object literal shorthand
+{
+    const x = 0;
+    const i: { readonly x: number } = { x };
+    use(i.x);
+}
+
 // Tests with destructuring -- be sure to have both `const { x } = y` and `({ x } = y)` versions as the code for each differs.
 {
     {
@@ -463,7 +491,6 @@ use(readonlyArray);
             let y: number;
                 ~ [noread]
             ({ x: y } = i);
-                  ~ noread]
         }
     }
 
@@ -471,11 +498,51 @@ use(readonlyArray);
         interface I { readonly x: { readonly y: number; }[]; }
                                ~ [nocreate]
                                              ~ [nocreate]
+                                  ~~~~~~~~~~~~~~~~~~~~~~~~~ [readonlyarray]
         function _(i: I) {
             let z: number;
                 ~ [noread]
             ({ x: [{ y: z }] } = i);
         }
+    }
+
+    {
+        interface I { readonly x: number[]; }
+                               ~ [nocreate]
+        function _(i: I) {
+            let z: number[];
+            ({ x: z } = i);
+            z.push(0);
+        }
+    }
+
+    // Parameters too
+    {
+        function _({ x }: { readonly x: number[] }) {
+                                     ~ [nocreate]
+            x.push(0);
+        }
+    }
+
+    {
+        interface I { readonly x: { readonly y: number[]; }[]; }
+                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~ [readonlyarray]
+        function f(i: I) {
+            const { x: [{ y: z }] } = i;
+            z.push(0);
+        }
+        f({ x: [{ y: [] }] });
+    }
+
+    {
+        interface I { readonly x: { readonly y: number[]; }[]; }
+                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~ [readonlyarray]
+        function f(i: I) {
+            let z: number[];
+            ({ x: [{ y: z }] } = i);
+            z.push(0);
+        }
+        f({ x: [{ y: [] }] });
     }
 }
 

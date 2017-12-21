@@ -17,11 +17,10 @@
 
 import assert = require("assert");
 import * as ts from "typescript";
-import { isAssignmentKind, isSymbolFlagSet, isTypeFlagSet, isNodeFlagSet } from "tsutils";
+import { isAssignmentKind, isSymbolFlagSet, isTypeFlagSet, hasModifier } from "tsutils";
 import { isReadonlyType } from "../noUnusedAnythingRule";
 import { assertNever, isFunctionLikeSymbol } from "./utils";
 
-//todo: dual mutable / readonly types
 export class SymbolUses {
     public private = Use.None;
     public public = Use.None;
@@ -55,7 +54,7 @@ export class SymbolUses {
     }
 
     get everAssignedANonFreshValue(): boolean {
-        return this.has(Use.CreateAlias);
+        return this.has(Use.Write | Use.CreateAlias);
     }
 
     private has(flag: Use): boolean {
@@ -99,7 +98,7 @@ class UseChecker {
 
     public work(node: ts.Expression, symbol: ts.Symbol | undefined, shouldAddAlias: boolean): Use {
         const parent = node.parent!;
-        switch (parent.kind) {
+        switch (parent.kind) { //todo: sort the switch
             case ts.SyntaxKind.AsExpression:
             case ts.SyntaxKind.TypeAssertionExpression:
             case ts.SyntaxKind.NonNullExpression:
@@ -112,30 +111,28 @@ class UseChecker {
                 if (node === name) {
                     // Recurse to parent to see how the property is being used.
                     return this.work(parent as ts.PropertyAccessExpression, symbol, shouldAddAlias);
-                } else {
-                    //If it's then used by a call expression, may be mutating a collection.
-                    const gp = parent.parent!; //name
-                    if (ts.isCallExpression(gp)) {
-                        // If the method name is e.g. "push" we aren't *writing* to the symbol, but we are writing to its *content*.
-                        const collectionMutateKind = getCollectionMutateKind(name.text);
-                        switch (collectionMutateKind) {
-                            case CollectionMutateKind.None:
-                                return Use.ReadReadonly;
-                            case CollectionMutateKind.ReturnCollection:
-                                return this.work(gp, symbol, shouldAddAlias) | Use.MutateCollection;
-                            case CollectionMutateKind.ReturnData:
-                                //gets data in addition to mutating the collection, so recurse to see if that data is used.
-                                return this.work(gp, symbol, shouldAddAlias) | Use.MutateCollection;
-                            case CollectionMutateKind.ReturnNonUseful:
-                                //returns the length of the collection,
-                                //but if that's all you're getting, having the collection is stupid, so mark as readonly
-                                return Use.MutateCollection;
-                            default:
-                                return assertNever(collectionMutateKind);
-                        }
-                    } else {
+                }
+
+                // If this property access is called, it's a method call -- may be mutating a collection.
+                const call = parent.parent!;
+                if (!ts.isCallExpression(call) || call.expression !== parent) {
+                    return Use.ReadReadonly;
+                }
+
+                // If the method name is e.g. "push" we aren't *writing* to the symbol, but we are writing to its *content*.
+                const collectionMutateKind = getCollectionMutateKind(name.text);
+                switch (collectionMutateKind) {
+                    case CollectionMutateKind.None:
                         return Use.ReadReadonly;
-                    }
+                    case CollectionMutateKind.ReturnThis:
+                        return this.work(call, symbol, shouldAddAlias) | Use.MutateCollection;
+                    case CollectionMutateKind.ReturnData:
+                        // Recurse to check if the returned data was actually used.
+                        return this.work(call, symbol, shouldAddAlias) | Use.MutateCollection;
+                    case CollectionMutateKind.ReturnNonUseful:
+                        return Use.MutateCollection;
+                    default:
+                        throw assertNever(collectionMutateKind);
                 }
             }
 
@@ -152,10 +149,6 @@ class UseChecker {
                 return node !== (parent as ts.NewExpression).expression
                     ? this.readFromContext(node)
                     : Use.ReadReadonly;
-
-            case ts.SyntaxKind.FunctionExpression:
-                assert(node === (parent as ts.FunctionExpression).name);
-                return Use.None; // Doesn't matter, we won't analyze a function expression anyway.
 
             case ts.SyntaxKind.PostfixUnaryExpression:
             case ts.SyntaxKind.PrefixUnaryExpression:
@@ -185,6 +178,10 @@ class UseChecker {
                     return this.readFromContext(node, addedAlias);
                 }
             }
+
+            case ts.SyntaxKind.BindingElement:
+                // Mark it as ReadReadonly for now, but in Analyzer we'll create an alias between the property and the new local.
+                return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.ReadReadonly : Use.CreateAlias;
 
             case ts.SyntaxKind.BinaryExpression: {
                 //note we are looking for mutations of the *value*, and *assigning* is ok.
@@ -224,6 +221,7 @@ class UseChecker {
                 return node === name ? Use.ReadReadonly : Use.Write;
             }
 
+            case ts.SyntaxKind.FunctionExpression: // We won't analyze this anyway.
             case ts.SyntaxKind.PropertySignature:
                 return Use.None;
 
@@ -293,7 +291,6 @@ class UseChecker {
             case ts.SyntaxKind.Parameter:
                 return node === (parent as ts.ParameterDeclaration).name ? Use.CreateAlias : this.readFromContext(node);
 
-            case ts.SyntaxKind.ArrayLiteralExpression:
             case ts.SyntaxKind.ReturnStatement:
             case ts.SyntaxKind.ArrowFunction: // Return value only, parameters are in ParameterDeclarations
             case ts.SyntaxKind.ThrowStatement:
@@ -311,17 +308,20 @@ class UseChecker {
                 const { name, initializer } = parent as ts.PropertyAssignment;
                 //preferconditional
                 if (isOnLeftHandSideOfDestructuring((parent as ts.ShorthandPropertyAssignment).parent)) {
-                    return node === name ? this.readFromContext(node) : Use.Write;
+                    // Mark as ReadReadonly for now; Analyzer will create an alias.
+                    return node === name ? Use.ReadReadonly : Use.Write;
                 } else {
                     return node === name ? createFlag(initializer) : this.readFromContext(node);
                 }
             }
 
-            case ts.SyntaxKind.BindingElement:
-                //todo: we might be reading it for a mutable type...
-                //todo: actually create an alias
-                //this aliases a property of the contextual type of the binding element
-                return isSymbolFlagSet(symbol!, ts.SymbolFlags.Property) ? Use.ReadReadonly : Use.CreateAlias;
+            case ts.SyntaxKind.ArrayLiteralExpression: {
+                //preferconditional
+                if (isOnLeftHandSideOfDestructuring(parent as ts.ArrayLiteralExpression)) {
+                    return Use.Write;
+                }
+                return this.readFromContext(node);
+            }
 
             default:
                 throw new Error(`TODO: handle ${ts.SyntaxKind[parent.kind]}`);
@@ -417,33 +417,40 @@ function isInOwnConstructor(node: ts.Node, propertySymbol: ts.Symbol): boolean {
 }
 
 const enum CollectionMutateKind {
+    /**
+     * Collection is read but not changed.
+     * These are presumed to return useful data, meaning it's not a write-only collection.
+     */
     None,
-    ReturnCollection,
-    ReturnData, //In addition to mutating the collection, returns info inside it
-    ReturnNonUseful, //e.g. 'push' returns the len, Set.add returns undefined.
+    /** Mutates the collection and returns it. Need to watch out for chained calls. */
+    ReturnThis,
+    /** Mutates the collection and returns useful data, meaning it's not a write-only collection. */
+    ReturnData,
+    /** Just mutates the collection and doesn't return values from inside it. It may be a write-only collection. */
+    ReturnNonUseful,
 }
 function getCollectionMutateKind(name: string): CollectionMutateKind {
     switch (name) {
         case "copyWithin":
         case "sort":
-        case "add": //from Set
-        case "set": //from Map
-            return CollectionMutateKind.ReturnCollection;
+        case "add": // Set
+        case "set": // Map
+            return CollectionMutateKind.ReturnThis;
         case "pop":
         case "shift":
         case "splice":
-        case "delete": //from Set/Map, returns whether delete succeeded
+        case "delete": // Set/Map, returns whether it succeeded, which is useful info
             return CollectionMutateKind.ReturnData;
-        case "push": //returns array length
-        case "unshift": //ditto
-        case "clear": //returns undefined
+        case "push": // Returns array length -- not really useful since you could use a counter instead
+        case "unshift": // Same as above
+        case "clear": // Returns undefined
             return CollectionMutateKind.ReturnNonUseful;
         default:
             return CollectionMutateKind.None;
     }
 }
 
-//mv
 function isAmbient(node: ts.Node): boolean {
-    return isNodeFlagSet(node, (ts.NodeFlags as any).Ambient); //todo
+    // OTOD: ts.NodeFlags.Ambient could be public, then just use isNodeFlagSet(node, ts.NodeFlags.Ambient)
+    return ts.isSourceFile(node) ? false : hasModifier(node.modifiers, ts.SyntaxKind.DeclareKeyword) || isAmbient(node.parent!);
 }

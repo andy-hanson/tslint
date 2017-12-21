@@ -71,9 +71,12 @@ export class Rule extends Lint.Rules.TypedRule {
     /* tslint:enable:object-literal-sort-keys */
 
     public applyWithProgram(sourceFile: ts.SourceFile, program: ts.Program): Lint.RuleFailure[] {
-        const info = getInfo(program);
-        const checker = program.getTypeChecker();
-        return this.applyWithWalker(new Walker(sourceFile, this.ruleName, parseOptions(this.getOptions()), info, checker));
+        return this.applyWithWalker(new Walker(
+            sourceFile,
+            this.ruleName,
+            parseOptions(this.getOptions()),
+            getInfo(program),
+            program.getTypeChecker()));
     }
 }
 
@@ -82,11 +85,9 @@ interface JsonOptions {
 }
 
 function parseOptions(gotOptions: Lint.IOptions): Options {
-    const obj0 = gotOptions.ruleArguments[0] as JsonOptions;
-    const obj = obj0 === undefined ? {} : obj0;
-    return {
-        ignoreNames: obj.ignoreNames === undefined ? new Set() : new Set(obj.ignoreNames),
-    }
+    const raw = gotOptions.ruleArguments[0] as JsonOptions | undefined;
+    const { ignoreNames }: JsonOptions = raw === undefined ? {} : raw;
+    return { ignoreNames: new Set(ignoreNames === undefined ? [] : ignoreNames) };
 }
 
 interface Options {
