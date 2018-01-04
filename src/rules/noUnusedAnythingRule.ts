@@ -115,7 +115,13 @@ class Walker extends Lint.AbstractWalker<Options> {
                 break;
             default:
                 if (isUsageTrackedDeclaration(node)) {
-                    this.checkSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
+                    const symbol = ts.isExportSpecifier(node)
+                        ? this.checker.getSymbolAtLocation(node.name)//this.checker.getExportSpecifierLocalTargetSymbol(node)!
+                        : this.checker.getSymbolAtLocation(node.name)!;
+                    if (!symbol) {
+                        throw new Error("!");//kill
+                    }
+                    this.checkSymbol(node, symbol);
                 }
         }
         node.forEachChild(child => this.walk(child));
@@ -161,21 +167,24 @@ class Walker extends Lint.AbstractWalker<Options> {
 
     private checkSymbolUses(node: UsageTrackedDeclaration, symbol: ts.Symbol, uses: SymbolUses): void {
         const fail = (failure: string): void => { this.addFailureAtNode(node.name, failure); };
-
         if (!uses.everUsedPublicly) {
             const privacyScope = getPrivacyScope(node);
             if (privacyScope === undefined) {
                 fail("Analysis found no uses of this symbol.");
+                return;
             } else if (ts.isSourceFile(privacyScope)) {
                 if (!isImplicitlyExported(node, this.sourceFile, this.checker)) {
                     fail("Analysis found no uses in other modules; this should not be exported.");
+                    return;
                 }
             } else {
                 if (!hasModifier(node.modifiers, ts.SyntaxKind.PrivateKeyword, ts.SyntaxKind.AbstractKeyword)) {
                     fail("Analysis found no public uses; this should be private.");
+                    return;
                 }
             }
-        } else if (!uses.everRead) {
+        }
+        if (!uses.everRead) {
             if (uses.everUsedForSideEffect && isFunctionLikeSymbol(symbol)) {
                 const sig = this.checker.getSignatureFromDeclaration(symbol.valueDeclaration as ts.SignatureDeclaration)!;
                 if (!isTypeFlagSet(this.checker.getReturnTypeOfSignature(sig), ts.TypeFlags.Void)) {
@@ -258,7 +267,7 @@ function getMutableCollectionTypeFromNode(
 }
 
 function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | undefined {
-    switch (node.kind) {
+    switch (node.kind) {//sort cases
         case ts.SyntaxKind.Parameter:
         case ts.SyntaxKind.VariableDeclaration:
         case ts.SyntaxKind.PropertyDeclaration:
@@ -280,6 +289,7 @@ function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | und
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.TypeParameter:
         case ts.SyntaxKind.BindingElement:
+        case ts.SyntaxKind.ExportSpecifier:
             return undefined;
         default:
             throw new Error(`TODO: Handle ${ts.SyntaxKind[node.kind]}`);

@@ -53,6 +53,7 @@ export function isUsageTrackedDeclaration(node: ts.Node): node is UsageTrackedDe
         case ts.SyntaxKind.EnumDeclaration:
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.TypeParameter:
+        case ts.SyntaxKind.ExportSpecifier:
             return true;
         case ts.SyntaxKind.FunctionDeclaration:
             return (node as ts.FunctionDeclaration).name !== undefined;
@@ -98,4 +99,21 @@ export function tryGetAliasedSymbol(symbol: ts.Symbol, checker: ts.TypeChecker):
 
 export function isFunctionLikeSymbol(symbol: ts.Symbol): boolean {
     return isSymbolFlagSet(symbol, ts.SymbolFlags.Function | ts.SymbolFlags.Method);
+}
+
+export function isOnLeftHandSideOfMutableDestructuring(node: ts.ArrayLiteralExpression | ts.ObjectLiteralExpression): boolean {
+    const parent = node.parent!;
+    switch (parent.kind) {
+        case ts.SyntaxKind.PropertyAssignment:
+            return isOnLeftHandSideOfMutableDestructuring((parent as ts.PropertyAssignment).parent);
+        case ts.SyntaxKind.ArrayLiteralExpression:
+        case ts.SyntaxKind.ObjectLiteralExpression:
+            return isOnLeftHandSideOfMutableDestructuring(parent as ts.ArrayLiteralExpression | ts.ObjectLiteralExpression);
+        case ts.SyntaxKind.BinaryExpression: {
+            const { left, operatorToken } = parent as ts.BinaryExpression;
+            return node === left && operatorToken.kind === ts.SyntaxKind.EqualsToken;
+        }
+        default:
+            return false;
+    }
 }

@@ -27,8 +27,8 @@ import {
 import * as ts from "typescript";
 
 import { EnumUse, getEnumUse } from "./enumUse";
-import { Use, getUse, SymbolUses, isOnLeftHandSideOfDestructuring } from "./use";
-import { multiMapAdd, skipAlias, zip, createIfNotSet, assertNever } from "./utils";
+import { Use, getUse, SymbolUses } from "./use";
+import { isOnLeftHandSideOfMutableDestructuring, multiMapAdd, skipAlias, zip, createIfNotSet, assertNever } from "./utils";
 import { isPublicAccess } from './privacy';
 import { isReadonlyType } from '../noUnusedAnythingRule';
 import { find, mapDefined, arrayify } from '../../utils';
@@ -92,6 +92,7 @@ class Analyzer {
                 }
                 break;
             }
+
             case ts.SyntaxKind.BinaryExpression: {
                 const { left, operatorToken, right } = node as ts.BinaryExpression;
                 if (operatorToken.kind === ts.SyntaxKind.EqualsToken) {
@@ -104,10 +105,12 @@ class Analyzer {
                 }
                 break;
             }
+
             case ts.SyntaxKind.ClassDeclaration:
             case ts.SyntaxKind.ClassExpression:
                 node.forEachChild(child => this.analyze(child, currentFile, node as ts.ClassLikeDeclaration));
                 return;
+
             case ts.SyntaxKind.TypeAssertionExpression:
             case ts.SyntaxKind.AsExpression:
             case ts.SyntaxKind.TypePredicate:
@@ -133,8 +136,8 @@ class Analyzer {
         switch (bind.kind) {
             case ts.SyntaxKind.Identifier: {
                 if (property !== undefined) {
-                    for (const root of this.checker.getRootSymbols(property)) {//test destructuring a union
-                        this.addAlias(bind, root);
+                    for (const root of this.checker.getRootSymbols(property)) {
+                        this.addAlias(root, bind);
                     }
                 }
                 break;
@@ -185,7 +188,7 @@ class Analyzer {
                         if (ts.isIdentifier(name) && ts.isIdentifier(initializer)) {
                             const sym = this.checker.getPropertySymbolOfDestructuringAssignment(name);
                             if (sym !== undefined) {
-                                this.addAlias(initializer, sym);
+                                this.addAlias(sym, initializer);
                             }
                         } else {
                             this.addAliasesFromMutatingDestructure(initializer);
@@ -228,40 +231,47 @@ class Analyzer {
         }
 
         const parent = node.parent!;
+        const use = (sym: ts.Symbol): void => this.trackUseOfSymbol(node, sym, currentFile, currentClass);
+
+        if (ts.isExportSpecifier(parent) && parent.propertyName === undefined) {
+            // Also track a use of the original symbol
+            use(sym);
+        }
+
         const destructedPropertySymbol = ts.isBindingElement(parent)
             ? getPropertySymbolOfObjectBindingPatternWithoutPropertyName(symbol, this.checker)
             : undefined;
         if (destructedPropertySymbol !== undefined) {
             // TODO: TypeScript probably shouldn't be giving us transient symbols here
             if (!isSymbolFlagSet(destructedPropertySymbol, ts.SymbolFlags.Transient)) {
-                this.addAlias(node, destructedPropertySymbol);
+                this.addAlias(destructedPropertySymbol, node);
             }
-            this.trackUseOfSymbol(node, destructedPropertySymbol, currentFile, currentClass);
+            use(destructedPropertySymbol);
         }
         else {
             const grandParent = parent.parent!;
             if (ts.isObjectLiteralElementLike(parent)
                 && parent.name === node
                 && (ts.isObjectLiteralExpression(grandParent) || ts.isJsxAttributes(grandParent))) {
-                if (ts.isObjectLiteralExpression(grandParent) && isOnLeftHandSideOfDestructuring(grandParent)) {
+                if (ts.isObjectLiteralExpression(grandParent) && isOnLeftHandSideOfMutableDestructuring(grandParent)) {
                     const propertySymbol = this.checker.getPropertySymbolOfDestructuringAssignment(node);
                     if (propertySymbol !== undefined) {
-                        this.trackUseOfSymbol(node, propertySymbol, currentFile, currentClass);
+                        use(propertySymbol);
                     }
                 } else {
                     for (const assignedPropertySymbol of getPropertySymbolsFromContextualType(node, parent, this.checker)) {
-                        this.trackUseOfSymbol(node, assignedPropertySymbol, currentFile, currentClass);
+                        use(assignedPropertySymbol);
                     }
                 }
                 // If this is shorthand, also count a use of the local symbol.
                 if (ts.isShorthandPropertyAssignment(parent)) {
-                    this.trackUseOfSymbol(node, this.checker.getShorthandAssignmentValueSymbol(parent)!, currentFile, currentClass);
+                    use(this.checker.getShorthandAssignmentValueSymbol(parent)!);
                 }
                 return;
             }
         }
 
-        this.trackUseOfSymbol(node, symbol, currentFile, currentClass);
+        use(symbol);
     }
 
     private trackUseOfSymbol(
@@ -275,7 +285,7 @@ class Analyzer {
                 return;
             }
 
-            const access = getUse(node, symbol, this.checker, aliasId => this.addAlias(aliasId, symbol));
+            const access = getUse(node, symbol, this.checker, aliasId => this.addAlias(symbol, aliasId, ));
             const info = this.getSymbolUses(symbol);
             if (isPublicAccess(node, symbol, currentFile, currentClass)) {
                 info.public |= access;
@@ -285,12 +295,10 @@ class Analyzer {
         }
     }
 
-    //swap params
-    private addAlias(aliasId: ts.Identifier, propertySymbol: ts.Symbol): void {
+    private addAlias(propertySymbol: ts.Symbol, aliasId: ts.Identifier): void {
         this.addAliasSymbol(propertySymbol, this.checker.getSymbolAtLocation(aliasId)!);
     }
 
-    //!
     private addAliasSymbol(propertySymbol: ts.Symbol, aliasSymbol: ts.Symbol): void {
         multiMapAdd(this.localVariableAliases, propertySymbol, aliasSymbol);
     }

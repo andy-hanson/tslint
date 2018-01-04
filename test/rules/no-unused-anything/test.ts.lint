@@ -319,7 +319,7 @@ namespace N {}
         z.push(0);
         use(x[0]);
     }
-
+    // Negative of above test
     {
         const x: number[] = [0];
                  ~~~~~~~~ [readonlyarray]
@@ -543,6 +543,32 @@ use(readonlyArray);
             z.push(0);
         }
         f({ x: [{ y: [] }] });
+    }
+
+    // Uses getRootSymbols to handle destructuring union
+    {
+        function _(o: { readonly x: number[] } | { readonly x: string[] }) {
+                                 ~ [nocreate]
+                                                            ~ [nocreate]
+            const { x } = o;
+            x.pop();
+        }
+    }
+}
+
+// Property mutated in constructor can still be readonly
+{
+    {
+        class C {
+            private x: number;
+                    ~ [readonly]
+            constructor() {
+                this.x = 0;
+                this.x++;
+                this.x *= 2;
+            }
+            _() { return this.x; }
+        }
     }
 }
 
