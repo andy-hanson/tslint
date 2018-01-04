@@ -1,7 +1,7 @@
-namespace N {
+namespace Arguments {
     export type T = number;
-    export const x: N.T = 0;
-                    ~ [N]
+    export const x: Arguments.T = 0;
+                    ~~~~~~~~~ [Arguments]
     export function f() {
       if (arguments.length > 0) {
         console.log('arguments should not break this rule');
@@ -9,4 +9,4 @@ namespace N {
     }
 }
 
-[N]: Qualifier is unnecessary since 'N' is in scope.
+[Arguments]: Qualifier is unnecessary since 'Arguments' is in scope.

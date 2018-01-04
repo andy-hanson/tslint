@@ -74,6 +74,23 @@ export function createIfNotSet<K extends object, V>(map: Map<K, V> | WeakMap<K, 
     }
 }
 
+export function createMultiMap<T, K, V>(inputs: ReadonlyArray<T>, getPair: (input: T) => [K, V] | undefined): Map<K, V[]> {
+    const map = new Map<K, V[]>();
+    for (const input of inputs) {
+        const pair = getPair(input);
+        if (pair !== undefined) {
+            const [k, v] = pair;
+            const vs = map.get(k);
+            if (vs !== undefined) {
+                vs.push(v);
+            } else {
+                map.set(k, [v]);
+            }
+        }
+    }
+    return map;
+}
+
 export function multiMapAdd<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
     const values = map.get(key);
     if (values === undefined) {

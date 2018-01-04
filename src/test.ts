@@ -27,9 +27,9 @@ import { Replacement } from "./language/rule/rule";
 import * as Linter from "./linter";
 import { Logger } from "./runner";
 import { denormalizeWinPath, mapDefined, readBufferWithDetectedEncoding, flatMap } from "./utils";
-import { LintError } from "./verify/lintError";
+import { LintError, PositionInFile } from "./verify/lintError";
 import * as parse from "./verify/parse";
-import { ILinterOptions } from '.';
+import { createMultiMap } from "./rules/analysis/utils";
 
 const MARKUP_FILE_EXTENSION = ".lint";
 const FIXES_FILE_EXTENSION = ".fix";
@@ -104,32 +104,36 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
     });
 
     const program = hasConfig ? makeProgram(compilerOptions, parsedFiles) : undefined;
-    const lintOptions: ILinterOptions = {
-        fix: false,
-        formatter: "prose",
-        formattersDirectory: "",
-        rulesDirectory,
-    };
-    const linter = new Linter(lintOptions, program);
-    for (const { fileToLint, fileCompileName, fileTextWithoutMarkup, errorsFromMarkup } of parsedFiles) {
+    const linter = new Linter({ fix: false, formatter: "prose", formattersDirectory: "", rulesDirectory }, program);
+    for (const { fileToLint, fileCompileName, fileTextWithoutMarkup } of parsedFiles) {
         // Need to use the true path (ending in '.lint') for "encoding" rule so that it can read the file.
         linter.lint(isEncodingRule ? fileToLint : fileCompileName, fileTextWithoutMarkup, tslintConfig);
-        const failures = linter.getResult().failures.filter(f => f.getFileName() === fileCompileName);
+    }
+
+    const allFailures = linter.getResult().failures;
+    const failuresByFile = createMultiMap(allFailures, f => [f.getFileName(), f]);
+
+    for (const { fileToLint, fileCompileName, fileTextWithoutMarkup, errorsFromMarkup } of parsedFiles) {
+        const file = isEncodingRule ? fileToLint : fileCompileName;
+        let failures = failuresByFile.get(file);
+        if (failures !== undefined) {
+            failuresByFile.delete(file);
+        } else {
+            failures = [];
+        }
+
         const errorsFromLinter = failures.map(failure => {
             const startLineAndCharacter = failure.getStartPosition().getLineAndCharacter();
             const endLineAndCharacter = failure.getEndPosition().getLineAndCharacter();
-
             return {
-                endPos: {
-                    col: endLineAndCharacter.character,
-                    line: endLineAndCharacter.line,
-                },
+                endPos: toPosition(endLineAndCharacter),
                 message: failure.getFailure(),
-                startPos: {
-                    col: startLineAndCharacter.character,
-                    line: startLineAndCharacter.line,
-                },
+                startPos: toPosition(startLineAndCharacter),
             };
+
+            function toPosition(lc: ts.LineAndCharacter): PositionInFile {
+                return { col: lc.character, line: lc.line };
+            }
         });
 
         // test against fixed files
@@ -157,6 +161,10 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
             markupFromMarkup: parse.createMarkupFromErrors(fileTextWithoutMarkup, errorsFromLinter),
             skipped: false,
         };
+    }
+
+    if (failuresByFile.size !== 0) {
+        throw new Error("There are extra failures in: " + Array.from(failuresByFile.keys()));
     }
 
     return results;

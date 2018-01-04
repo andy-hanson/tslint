@@ -38,6 +38,7 @@ import { IRule, isTypedRule, Replacement, RuleFailure, RuleSeverity } from "./la
 import * as utils from "./language/utils";
 import { loadRules } from "./ruleLoader";
 import { arrayify, dedent, flatMap, mapDefined } from "./utils";
+import { createMultiMap } from "./rules/analysis/utils";
 
 /**
  * Linter that can lint multiple files in consecutive runs.
@@ -272,20 +273,3 @@ class Linter {
 namespace Linter { }
 
 export = Linter;
-
-function createMultiMap<T, K, V>(inputs: ReadonlyArray<T>, getPair: (input: T) => [K, V] | undefined): ReadonlyMap<K, V[]> {
-    const map = new Map<K, V[]>();
-    for (const input of inputs) {
-        const pair = getPair(input);
-        if (pair !== undefined) {
-            const [k, v] = pair;
-            const vs = map.get(k);
-            if (vs !== undefined) {
-                vs.push(v);
-            } else {
-                map.set(k, [v]);
-            }
-        }
-    }
-    return map;
-}
