@@ -53,7 +53,6 @@ export function isUsageTrackedDeclaration(node: ts.Node): node is UsageTrackedDe
         case ts.SyntaxKind.EnumDeclaration:
         case ts.SyntaxKind.TypeAliasDeclaration:
         case ts.SyntaxKind.TypeParameter:
-        case ts.SyntaxKind.ExportSpecifier:
             return true;
         case ts.SyntaxKind.FunctionDeclaration:
             return (node as ts.FunctionDeclaration).name !== undefined;

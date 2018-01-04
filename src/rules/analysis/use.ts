@@ -340,19 +340,6 @@ class UseChecker {
     }
 }
 
-//kill
-export function showSymbolFlags(symbol: ts.Symbol): string {
-    const res = [];
-    for (const flag in ts.SymbolFlags) {
-        const value = ts.SymbolFlags[flag];
-        if (typeof value !== "number") continue;
-        if (symbol.flags & value) {
-            res.push(flag);
-        }
-    }
-    return res.join();
-}
-
 function createFlag(initializer: ts.Expression | undefined): Use {
     return initializer === undefined
         ? Use.None

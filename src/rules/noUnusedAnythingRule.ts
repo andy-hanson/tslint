@@ -115,13 +115,7 @@ class Walker extends Lint.AbstractWalker<Options> {
                 break;
             default:
                 if (isUsageTrackedDeclaration(node)) {
-                    const symbol = ts.isExportSpecifier(node)
-                        ? this.checker.getSymbolAtLocation(node.name)//this.checker.getExportSpecifierLocalTargetSymbol(node)!
-                        : this.checker.getSymbolAtLocation(node.name)!;
-                    if (!symbol) {
-                        throw new Error("!");//kill
-                    }
-                    this.checkSymbol(node, symbol);
+                    this.checkSymbol(node, this.checker.getSymbolAtLocation(node.name)!);
                 }
         }
         node.forEachChild(child => this.walk(child));
@@ -267,14 +261,14 @@ function getMutableCollectionTypeFromNode(
 }
 
 function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | undefined {
-    switch (node.kind) {//sort cases
+    switch (node.kind) {
         case ts.SyntaxKind.Parameter:
         case ts.SyntaxKind.VariableDeclaration:
         case ts.SyntaxKind.PropertyDeclaration:
         case ts.SyntaxKind.MethodDeclaration:
+        case ts.SyntaxKind.PropertyDeclaration:
         case ts.SyntaxKind.MethodSignature:
         case ts.SyntaxKind.FunctionDeclaration:
-        case ts.SyntaxKind.PropertyDeclaration:
         case ts.SyntaxKind.PropertySignature:
         case ts.SyntaxKind.GetAccessor:
         case ts.SyntaxKind.SetAccessor:
@@ -285,8 +279,8 @@ function getTypeAnnotationNode(node: UsageTrackedDeclaration): ts.TypeNode | und
             return (node as T).type;
         case ts.SyntaxKind.EnumDeclaration:
         case ts.SyntaxKind.InterfaceDeclaration:
-        case ts.SyntaxKind.ModuleDeclaration:
         case ts.SyntaxKind.TypeAliasDeclaration:
+        case ts.SyntaxKind.ModuleDeclaration:
         case ts.SyntaxKind.TypeParameter:
         case ts.SyntaxKind.BindingElement:
         case ts.SyntaxKind.ExportSpecifier:

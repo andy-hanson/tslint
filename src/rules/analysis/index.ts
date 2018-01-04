@@ -384,7 +384,7 @@ class Analyzer {
                 if (originalInfo.everUsedAsMutableCollection) {
                     return; // Nothing to propagate
                 }
-                for (const alias of aliases) {
+                aliases.forEach(alias => {
                     const aliasInfo = this.symbolUses.get(alias)!;
                     // TODO: We might choose to warn on a collection which is mutated privately but publicly is only read.
                     if (aliasInfo.everUsedAsMutableCollection) {
@@ -392,18 +392,18 @@ class Analyzer {
                         originalInfo.public |= Use.ReadWithMutableType;
                         hadChanges = true;
                     }
-                }
+                });
             });
         }
     }
 
     /** When we assign to a type T from a type U, the properties in U are read and the corresponding properties in T are written. */
     private addUsesFromAssignments(): void {
-        for (const [source, targets] of this.typeAssignments) {
-            for (const target of targets) {
+        this.typeAssignments.forEach((targets, source) => {
+            targets.forEach(target => {
                 this.addUsesFromAssignment(source, target);
-            }
-        }
+            });
+        });
     }
 
     private addUsesFromAssignment(source: ts.Type, target: ts.Type): void {

@@ -190,9 +190,11 @@ function generateJekyllData(metadata: any, layout: string, type: string, name: s
  */
 function generateRuleFile(metadata: IRuleMetadata): string {
     if (metadata.optionExamples) {
-        metadata = { ...metadata };
-        metadata.optionExamples = (metadata.optionExamples as any[]).map((example) =>
-            typeof example === "string" ? example : stringify(example));
+        metadata = {
+            ...metadata,
+            optionExamples: (metadata.optionExamples as any[]).map((example) =>
+                typeof example === "string" ? example : stringify(example)),
+        };
     }
 
     const yamlData = generateJekyllData(metadata, "rule", "Rule", metadata.ruleName);
