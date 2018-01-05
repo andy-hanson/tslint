@@ -94,12 +94,12 @@ export function runTest(testDirectory: string, rulesDirectory?: string | string[
     const isEncodingRule = path.basename(testDirectory) === "encoding";
 
     const parsedFiles = mapDefined(filesToLint, fileToLint => {
-        const m = parseFile(isEncodingRule, fileToLint);
-        if ("skipped" in m) {
-            results.results[fileToLint] = m;
+        const parsed = parseFile(isEncodingRule, fileToLint);
+        if ("skipped" in parsed) {
+            results.results[fileToLint] = parsed as SkippedTest;
             return undefined;
         } else {
-            return m;
+            return parsed as ParsedFile;
         }
     });
 

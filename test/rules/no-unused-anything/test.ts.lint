@@ -94,7 +94,7 @@ namespace N {}
 // Detects never-created properties.
 {
     class C {
-        readonly p!: number;
+        readonly p: number;
                  ~ [nocreate]
     }
     use(new C().p);
@@ -117,7 +117,7 @@ namespace N {}
     {
         interface I { x: number; }
                       ~ [unused]
-        function _(i: I) { return i; }
+        function _(i: I): I { return i; }
     }
 
     // 'any' indirectly assigns to all properties

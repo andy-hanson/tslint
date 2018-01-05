@@ -65,22 +65,22 @@ export class SymbolUses {
 export const enum Use {
     None = 0,
     /** Only reads from a variable. */
-    ReadReadonly = 2 ** 0,
+    ReadReadonly = 1 << 0,
     /** Assign this to a variable that's not a readonly collection. */
-    ReadWithMutableType = 2 ** 1,
+    ReadWithMutableType = 1 << 1,
     /** Call a method like `push()` that's *purely* a setter; we will detect collections that are *only* pushed to. */
-    MutateCollection = 2 ** 2,
+    MutateCollection = 1 << 2,
     /**
      * Only writes to a variable without using the result. E.g.: `x++;`.
      * Note that mutating the variable pointing to a collection is not mutating the collection.
      */
-    Write = 2 ** 3,
+    Write = 1 << 3,
     /** Creates it as in `x = []` */
-    CreateFresh = 2 ** 4,
+    CreateFresh = 1 << 4,
     /** Creates it as in `x = f()` (may be an alias) */
-    CreateAlias = 2 ** 5,
+    CreateAlias = 1 << 5,
     /** Calling `f()` uses it for a side effect, but doesn't touch the return value. */
-    SideEffect = 2 ** 6,
+    SideEffect = 1 << 6,
 
     ReadEitherWay = ReadReadonly | ReadWithMutableType,
 }

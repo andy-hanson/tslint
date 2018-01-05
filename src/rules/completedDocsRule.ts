@@ -397,7 +397,7 @@ function walk(context: Lint.WalkContext<ExclusionsMap>, typeChecker: ts.TypeChec
             return;
         }
 
-        const comments = symbol.getDocumentationComment(typeChecker);
+        const comments = symbol.getDocumentationComment();
         checkComments(node, describeNode(nodeType), comments, requirementNode);
     }
 

@@ -394,7 +394,8 @@ function getOptionsJson(
         throw new Error("Got empty options");
     }
 
-    const firstOption = allOptions[0] as { [OPTION_ORDER]: MemberCategoryJson[] | string; [OPTION_ALPHABETIZE]?: boolean } | string;
+    // tslint:disable-next-line no-unused-anything (fixed in typescript@next)
+    const firstOption = allOptions[0] as { readonly order: MemberCategoryJson[] | string; readonly alphabetize?: boolean } | string;
     if (typeof firstOption !== "object") {
         // Undocumented direct string option. Deprecate eventually.
         return { order: convertFromOldStyleOptions(allOptions), alphabetize: false }; // presume allOptions to be string[]

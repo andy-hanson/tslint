@@ -22,8 +22,8 @@ import { getEqualsKind, ancestorWhere } from "../..";
 
 export const enum EnumUse {
     None = 0,
-    Tested = 2 ** 0,
-    UsedInExpression = 2 ** 1,
+    Tested = 1 << 0,
+    UsedInExpression = 1 << 1,
 }
 
 export function hasEnumUse(a: EnumUse, b: EnumUse): boolean {
